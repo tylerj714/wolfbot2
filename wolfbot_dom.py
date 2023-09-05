@@ -1,18 +1,56 @@
 #! wolfbot_dom.py
 # a class for managing game state details
 import json
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
+class Embed:
+    def __init__(self, title: str, descr: str, color: str, fields: Dict[str, str]):
+        self.title = title
+        self.descr = descr
+        self.color = color
+        self.fields = fields
+
+
+class CharacterEmbed:
+    def __init__(self, message_id: int, embeds: List[Embed]):
+        self.message_id = message_id
+        self.embeds = embeds
+
+
+class PlayerCharacter:
+    def __init__(self, role_id: int, character_embeds: List[CharacterEmbed]):
+        self.role_id = role_id
+        self.character_embeds = character_embeds
+
+
+class Attribute:
+    def __init__(self, name: str, level: int, max_level: int):
+        self.name = name
+        self.level = level
+        self.max_level = max_level
+
+
+class Action:
+    def __init__(self, name: str, desc: str, uses: int, image: str, timing: str):
+        self.name = name
+        self.desc = desc
+        self.uses = uses
+        self.image = image
+        self.timing = timing
+
+
 class Player:
-    def __init__(self, player_id: int, player_discord_name: str, is_dead: bool = False):
+    def __init__(self, player_id: int, player_discord_name: str, player_mod_channel: str, player_attributes: List[Attribute],
+                 player_actions: List[Action], is_dead: bool = False):
         self.player_id = player_id
         self.player_discord_name = player_discord_name
+        self.player_mod_channel = player_mod_channel
+        self.player_attributes = player_attributes
+        self.player_actions = player_actions
         self.is_dead = is_dead
 
-    def set_assets(self, assets: int):
-        self.assets = assets
 
 class Vote:
     def __init__(self, player_id: int, choice: str, timestamp: int):
@@ -20,8 +58,9 @@ class Vote:
         self.choice = choice
         self.timestamp = timestamp
 
+
 class Round:
-    def __init__(self, votes: [Vote], round_number: int, is_active_round: bool):
+    def __init__(self, votes: List[Vote], round_number: int, is_active_round: bool):
         self.votes = votes
         self.round_number = round_number
         self.is_active_round = is_active_round
@@ -39,8 +78,9 @@ class Round:
     def remove_vote(self, vote: Vote):
         self.votes.remove(vote)
 
+
 class Game:
-    def __init__(self, is_active: bool, players: [Player], rounds: [Round]):
+    def __init__(self, is_active: bool, players: List[Player], rounds: List[Round]):
         self.is_active = is_active
         self.players = players
         self.rounds = rounds
@@ -78,6 +118,7 @@ class Game:
                 latest_round = a_round
         return latest_round
 
+
 def read_json_to_dom(filepath: str) -> Game:
     with open(filepath, 'r', encoding="utf8") as openfile:
         json_object = json.load(openfile)
@@ -88,10 +129,36 @@ def read_json_to_dom(filepath: str) -> Game:
         if json_object.get("players") is not None:
             for player_entry in json_object.get("players"):
                 player_id = player_entry.get("player_id")
+                player_mod_channel = player_entry.get("player_mod_channel")
                 player_discord_name = player_entry.get("player_discord_name")
                 is_dead = player_entry.get("is_dead")
+                attributes = []
+                if player_entry.get("player_attributes") is not None:
+                    for attribute_entry in player_entry.get("player_attributes"):
+                        attribute_name = attribute_entry.get("name")
+                        attribute_level = attribute_entry.get("level")
+                        attribute_max_level = attribute_entry.get("max_level")
+                        attributes.append(Attribute(name=attribute_name,
+                                                    level=attribute_level,
+                                                    max_level=attribute_max_level))
+                actions = []
+                if player_entry.get("player_actions") is not None:
+                    for action_entry in player_entry.get("player_actions"):
+                        action_name = action_entry.get("name")
+                        action_desc = action_entry.get("desc")
+                        action_uses = action_entry.get("uses")
+                        action_timing = action_entry.get("timing")
+                        action_image = action_entry.get("image")
+                        actions.append(Action(name=action_name,
+                                              desc=action_desc,
+                                              uses=action_uses,
+                                              timing=action_timing,
+                                              image=action_image))
                 players.append(Player(player_id=player_id,
                                       player_discord_name=player_discord_name,
+                                      player_mod_channel=player_mod_channel,
+                                      player_attributes=attributes,
+                                      player_actions=actions,
                                       is_dead=is_dead))
 
         if json_object.get("rounds") is not None:
@@ -113,6 +180,7 @@ def read_json_to_dom(filepath: str) -> Game:
 
         return Game(is_active, players, rounds)
 
+
 def write_dom_to_json(game: Game, filepath: str):
     with open(filepath, 'w', encoding="utf8") as outfile:
 
@@ -120,8 +188,23 @@ def write_dom_to_json(game: Game, filepath: str):
         game_dict = {"is_active": game.is_active}
         player_dicts = []
         for player in game.players:
+            attribute_dicts = []
+            for attribute in player.player_attributes:
+                attribute_dicts.append({"name": attribute.name,
+                                        "level": attribute.level,
+                                        "max_level": attribute.max_level})
+            action_dicts = []
+            for action in player.player_actions:
+                action_dicts.append({"name": action.name,
+                                     "desc": action.desc,
+                                     "uses": action.uses,
+                                     "timing": action.timing,
+                                     "image": action.image})
             player_dicts.append({"player_id": player.player_id,
                                  "player_discord_name": player.player_discord_name,
+                                 "player_mod_channel": player.player_mod_channel,
+                                 "player_attributes": attribute_dicts,
+                                 "player_actions": action_dicts,
                                  "is_dead": player.is_dead
                                  })
         game_dict["players"] = player_dicts
