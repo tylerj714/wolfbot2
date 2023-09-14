@@ -3,17 +3,31 @@ import os
 import discord
 from dotenv import load_dotenv
 from discord import app_commands, Member, Guild
-from typing import List, Optional, Literal
-import wolfbot_dom
-from wolfbot_dom import Game, Player, Round, Vote
+from typing import List, Optional, Literal, Dict
+import game_manager
+from game_manager import Game, Player, Round, Vote
 from logging_manager import logger
 import time
+import emoji_manager
+import game_configurations
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD_ID = int(os.getenv('GUILD_ID'))
 VOTE_CHANNEL = int(os.getenv('VOTE_CHANNEL'))
+MOD_CATEGORY = int(os.getenv('MOD_CATEGORY'))
 BASE_PATH = os.getenv('BASE_PATH')
+EMOJI_FILE = os.getenv('EMOJI_FILE')
+EMOJI_PATH = f'{BASE_PATH}/{EMOJI_FILE}'
+GAME_CONF_FILE = os.getenv('GAME_CONF_FILE')
+GAME_CONF_PATH = f'{BASE_PATH}/{GAME_CONF_FILE}'
+CHARACTER_FILE = os.getenv('CHARACTER_FILE')
+CHAR_FILE_PATH = f'{BASE_PATH}/{CHARACTER_FILE}'
+PLAYER_CHARACTER_FILE = os.getenv('PLAYER_CHARACTER_FILE')
+PLAYER_CHAR_PATH = f'{BASE_PATH}/{PLAYER_CHARACTER_FILE}'
+GAME_FILE = os.getenv('GAME_FILE')
+GAME_PATH = f'{BASE_PATH}/{GAME_FILE}'
+
 
 class WolfBotClient(discord.Client):
     def __init__(self):
@@ -32,14 +46,14 @@ client = WolfBotClient()
 tree = app_commands.CommandTree(client)
 
 async def player_list_autocomplete(interaction: discord.Interaction,
-                                   current: str,
-                             ) -> List[app_commands.Choice[str]]:
-    game = await get_game(BASE_PATH)
+                                   current: str) -> List[app_commands.Choice[str]]:
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
     players = await get_valid_players(current, game.players)
     return [
         app_commands.Choice(name=player.player_discord_name, value=str(player.player_id))
         for player in players
     ]
+
 
 async def get_valid_players(substr: str, players: List[Player]) -> List[Player]:
     player_list = []
@@ -50,6 +64,7 @@ async def get_valid_players(substr: str, players: List[Player]) -> List[Player]:
             player_list.append(player)
     return player_list[:25]
 
+
 @tree.command(name="toggle-activity",
               description="Enables/Disables bot commands for players",
               guild=discord.Object(id=GUILD_ID))
@@ -57,11 +72,11 @@ async def get_valid_players(substr: str, players: List[Player]) -> List[Player]:
 async def toggle_activity(interaction: discord.Interaction,
                           active: Literal['True', 'False']):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     game.is_active = True if active == 'True' else False
 
-    await write_game(game, BASE_PATH)
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
     await interaction.response.send_message(f'Game state has been set to {active}!', ephemeral=True)
 
 @tree.command(name="clear-messages",
@@ -70,8 +85,7 @@ async def toggle_activity(interaction: discord.Interaction,
 @app_commands.default_permissions(manage_guild=True)
 async def clear_messages(interaction: discord.Interaction,
                          channel: discord.TextChannel,
-                         channel_again: discord.TextChannel
-                     ):
+                         channel_again: discord.TextChannel):
     log_interaction_call(interaction)
 
     if channel != channel_again:
@@ -82,22 +96,36 @@ async def clear_messages(interaction: discord.Interaction,
 
 
 @tree.command(name="add-player",
-              description="Adds a player to the game",
+              description="Adds a player to the game, creating a private moderator channel for them in the process.",
               guild=discord.Object(id=GUILD_ID))
 @app_commands.default_permissions(manage_guild=True)
 async def add_player(interaction: discord.Interaction,
-                     player: discord.Member):
+                     player: discord.Member,
+                     channel_name: str):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     if game.get_player(player.id) is None:
+
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            player: discord.PermissionOverwrite(read_messages=True)
+        }
+
+        category_channel = await interaction.guild.fetch_channel(MOD_CATEGORY)
+        mod_channel = await interaction.guild.create_text_channel(name=channel_name, overwrites=overwrites, category=category_channel)
+
         new_player = Player(player_id=player.id,
-                            player_discord_name=player.name)
+                            player_discord_name=player.name,
+                            player_mod_channel=mod_channel.id,
+                            player_attributes=[],
+                            player_actions=[])
         game.add_player(new_player)
-        await write_game(game, BASE_PATH)
+        await game_manager.write_game(game=game, file_path=GAME_PATH)
         await interaction.response.send_message(f'Added player {player.name} to game!', ephemeral=True)
     else:
         await interaction.response.send_message(f'Failed to add {player.name} to game!', ephemeral=True)
+
 
 @tree.command(name="start-round",
               description="Creates and enables the current round, if possible",
@@ -105,7 +133,7 @@ async def add_player(interaction: discord.Interaction,
 @app_commands.default_permissions(manage_guild=True)
 async def start_round(interaction: discord.Interaction):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     latest_round = game.get_latest_round()
 
@@ -119,7 +147,7 @@ async def start_round(interaction: discord.Interaction):
         new_round = Round(votes=[], round_number=latest_round.round_number + 1, is_active_round=True)
         game.add_round(new_round)
 
-    await write_game(game, BASE_PATH)
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
     await interaction.response.send_message(f'Created round {new_round.round_number}!', ephemeral=True)
 
 
@@ -129,7 +157,7 @@ async def start_round(interaction: discord.Interaction):
 @app_commands.default_permissions(manage_guild=True)
 async def end_round(interaction: discord.Interaction):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     latest_round = game.get_latest_round()
 
@@ -139,7 +167,7 @@ async def end_round(interaction: discord.Interaction):
     else:
         latest_round.is_active_round = False
 
-    await write_game(game, BASE_PATH)
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
     await interaction.response.send_message(f'Ended round {latest_round.round_number}!', ephemeral=True)
 
 @tree.command(name="kill-player",
@@ -151,7 +179,7 @@ async def kill_player(interaction: discord.Interaction,
                       player: str,
                       dead: Literal['True', 'False']):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     this_player = game.get_player(int(player))
     if this_player is None:
@@ -159,7 +187,7 @@ async def kill_player(interaction: discord.Interaction,
     else:
         this_player.is_dead = True if dead == 'True' else False
 
-        await write_game(game, BASE_PATH)
+        await game_manager.write_game(game=game, file_path=GAME_PATH)
         await interaction.response.send_message(f'Set alive status of {this_player.player_discord_name} to {dead}!', ephemeral=True)
 
 
@@ -172,7 +200,7 @@ async def vote_player(interaction: discord.Interaction,
                       player: Optional[str] = None,
                       other: Optional[Literal['No Vote', 'Unvote']] = None):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     if not game.is_active:
         await interaction.response.send_message(f'The bot has been put in an inactive state by the moderator. Please try again later.', ephemeral=True)
@@ -224,7 +252,7 @@ async def vote_player(interaction: discord.Interaction,
                 round_current_player_vote.choice = str(voted_player.player_id)
                 round_current_player_vote.timestamp = round(time.time())
 
-        await write_game(game, BASE_PATH)
+        await game_manager.write_game(game=game, file_path=GAME_PATH)
 
         if voted_player is not None:
             success_vote_target = voted_player.player_discord_name
@@ -251,7 +279,7 @@ async def vote_report(interaction: discord.Interaction,
                       for_round: Optional[app_commands.Range[int, 0, 20]] = None,
                       with_history: Optional[Literal['Yes', 'No']] = 'No'):
     log_interaction_call(interaction)
-    game = await get_game(BASE_PATH)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
 
     if not game.is_active:
         await interaction.response.send_message(f'The bot has been put in an inactive state by the moderator. Please try again later.', ephemeral=True)
@@ -302,6 +330,18 @@ async def vote_report(interaction: discord.Interaction,
     #With History to-be-implemented
 
 
+@tree.command(name="cycle-game-conf",
+              description="Reads and then writes the game conf",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+async def toggle_activity(interaction: discord.Interaction):
+    log_interaction_call(interaction)
+    game_conf = await game_configurations.get_game_conf(file_path=GAME_CONF_PATH)
+
+    await game_configurations.write_game_conf(game_conf=game_conf, file_path=GAME_CONF_PATH)
+    await interaction.response.send_message(f'Game Configuration has been updated!', ephemeral=True)
+
+
 @tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.CommandOnCooldown):
@@ -310,20 +350,9 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     else:
         raise error
 
-async def get_game(path: str) -> Game:
-    json_file_path = f'{path}/game.json'
-    logger.info(f'Grabbing game info from {json_file_path}')
-    return wolfbot_dom.read_json_to_dom(json_file_path)
-
-
-async def write_game(game: Game, path: str):
-    json_file_path = f'{path}/game.json'
-    logger.info(f'Wrote game data to {json_file_path}')
-    wolfbot_dom.write_dom_to_json(game, json_file_path)
-
 
 def log_interaction_call(interaction: discord.Interaction):
-    logger.info(
-        f'Received command {interaction.command.name} with parameters {interaction.data} initiated by user {interaction.user.name}')
+    logger.info(f'Received command {interaction.command.name} with parameters {interaction.data} initiated by user {interaction.user.name}')
+
 
 client.run(TOKEN)
