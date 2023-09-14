@@ -1,7 +1,8 @@
-#! wolfbot_dom.py
+#! game_manager.py
 # a class for managing game state details
 import json
 from typing import Optional, List, Dict
+from logging_manager import logger
 from datetime import datetime
 
 
@@ -17,12 +18,6 @@ class CharacterEmbed:
     def __init__(self, message_id: int, embeds: List[Embed]):
         self.message_id = message_id
         self.embeds = embeds
-
-
-class PlayerCharacter:
-    def __init__(self, role_id: int, character_embeds: List[CharacterEmbed]):
-        self.role_id = role_id
-        self.character_embeds = character_embeds
 
 
 class Attribute:
@@ -42,7 +37,7 @@ class Action:
 
 
 class Player:
-    def __init__(self, player_id: int, player_discord_name: str, player_mod_channel: str, player_attributes: List[Attribute],
+    def __init__(self, player_id: int, player_discord_name: str, player_mod_channel: int, player_attributes: List[Attribute],
                  player_actions: List[Action], is_dead: bool = False):
         self.player_id = player_id
         self.player_discord_name = player_discord_name
@@ -220,3 +215,13 @@ def write_dom_to_json(game: Game, filepath: str):
                                 "votes": vote_dicts})
         game_dict["rounds"] = round_dicts
         json.dump(game_dict, outfile, indent=2, ensure_ascii=False)
+
+async def get_game(file_path: str) -> Game:
+    logger.info(f'Grabbing game info from {file_path}')
+    return read_json_to_dom(filepath=file_path)
+
+
+async def write_game(game: Game, file_path: str):
+    logger.info(f'Wrote game data to {file_path}')
+    write_dom_to_json(game=game, filepath=file_path)
+
