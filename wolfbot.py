@@ -2,12 +2,14 @@
 import os
 import discord
 from dotenv import load_dotenv
-from discord import app_commands, Member, Guild
+from discord import app_commands, Member, Guild, User
 from typing import List, Optional, Literal, Dict
 import game_manager
-from game_manager import Game, Player, Round, Vote
+from game_manager import Game, Player, Round, Vote, Party, Dilemma
 from logging_manager import logger
 import time
+import random
+import string
 import emoji_manager
 import game_configurations
 
@@ -15,6 +17,7 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD_ID = int(os.getenv('GUILD_ID'))
 VOTE_CHANNEL = int(os.getenv('VOTE_CHANNEL'))
+PRIVATE_CHAT_CATEGORY = int(os.getenv('PRIVATE_CHAT_CATEGORY'))
 MOD_CATEGORY = int(os.getenv('MOD_CATEGORY'))
 BASE_PATH = os.getenv('BASE_PATH')
 EMOJI_FILE = os.getenv('EMOJI_FILE')
@@ -64,6 +67,45 @@ async def get_valid_players(substr: str, players: List[Player]) -> List[Player]:
             player_list.append(player)
     return player_list[:25]
 
+
+async def party_list_autocomplete(interaction: discord.Interaction,
+                                  current: str) -> List[app_commands.Choice[str]]:
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+    parties = await get_valid_parties(current, game.parties)
+    return [
+        app_commands.Choice(name=f'{party.party_name} ({len(party.player_ids)}/{party.max_size})', value=str(party.channel_id))
+        for party in parties
+    ]
+
+
+async def get_valid_parties(substr: str, parties: List[Party]) -> List[Party]:
+    party_list = []
+    for party in sorted(parties, key=lambda e: e.party_name.lower()):
+        if substr and substr.lower() not in party.party_name.lower():
+            continue
+        # if not len(party.player_ids) >= party.max_size:
+        party_list.append(party)
+    return party_list[:25]
+
+
+async def dilemma_choice_autocomplete(interaction: discord.Interaction,
+                                      current: str) -> List[app_commands.Choice[str]]:
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+    dilemma_choices = await get_valid_dilemma_choices(current, game, interaction.user)
+    return [
+        app_commands.Choice(name=choice, value=choice)
+        for choice in dilemma_choices
+    ]
+
+async def get_valid_dilemma_choices(substr: str, game: Game, user: User) -> List[str]:
+    choice_list = []
+    game_round = game.get_latest_round
+    if game_round is not None:
+        round_dilemma = game_round.get_player_dilemma(user.id)
+        if round_dilemma is not None:
+            for dilemma_choice in round_dilemma.dilemma_choices:
+                choice_list.append(dilemma_choice)
+    return choice_list[:25]
 
 @tree.command(name="toggle-activity",
               description="Enables/Disables bot commands for players",
@@ -169,6 +211,103 @@ async def end_round(interaction: discord.Interaction):
 
     await game_manager.write_game(game=game, file_path=GAME_PATH)
     await interaction.response.send_message(f'Ended round {latest_round.round_number}!', ephemeral=True)
+
+
+@tree.command(name="create-dilemma",
+              description="Creates and enables a dilemma for the current round, if possible",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+async def create_dilemma(interaction: discord.Interaction,
+                         dilemma_name: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    latest_round = game.get_latest_round()
+
+    if latest_round is None:
+        await interaction.response.send_message(f'There is currently no active round; you must create an active round first', ephemeral=True)
+    elif not latest_round.is_active_round:
+        await interaction.response.send_message(f'The most recent round is not currently active; the current round must be active to create a dilemma!', ephemeral=True)
+        return
+    else:
+        new_dilemma = Dilemma(dilemma_votes=[], dilemma_id = dilemma_name, dilemma_player_ids=[], dilemma_choices=[], is_active_dilemma=False)
+        latest_round.add_dilemma(new_dilemma)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Created dilemma {new_dilemma.dilemma_id} for round {latest_round.round_number}!', ephemeral=True)
+
+
+@tree.command(name="update-dilemma-player",
+              description="Adds or removes a player from a selected dilemma",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+async def update_dilemma_player(interaction: discord.Interaction,
+                         dilemma_name: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    latest_round = game.get_latest_round()
+
+    if latest_round is None:
+        await interaction.response.send_message(f'There is currently no active round; you must create an active round first', ephemeral=True)
+    elif not latest_round.is_active_round:
+        await interaction.response.send_message(f'The most recent round is not currently active; the current round must be active to create a dilemma!', ephemeral=True)
+        return
+    else:
+        new_dilemma = Dilemma(dilemma_votes=[], dilemma_id = dilemma_name, dilemma_player_ids=[], dilemma_choices=[], is_active_dilemma=False)
+        latest_round.add_dilemma(new_dilemma)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Created dilemma {new_dilemma.dilemma_id} for round {latest_round.round_number}!', ephemeral=True)
+
+
+@tree.command(name="update-dilemma-choices",
+              description="Adds or Removes a choice to a selected dilemma",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+async def update_dilemma_choices(interaction: discord.Interaction,
+                         dilemma_name: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    latest_round = game.get_latest_round()
+
+    if latest_round is None:
+        await interaction.response.send_message(f'There is currently no active round; you must create an active round first', ephemeral=True)
+    elif not latest_round.is_active_round:
+        await interaction.response.send_message(f'The most recent round is not currently active; the current round must be active to create a dilemma!', ephemeral=True)
+        return
+    else:
+        new_dilemma = Dilemma(dilemma_votes=[], dilemma_id = dilemma_name, dilemma_player_ids=[], dilemma_choices=[], is_active_dilemma=False)
+        latest_round.add_dilemma(new_dilemma)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Created dilemma {new_dilemma.dilemma_id} for round {latest_round.round_number}!', ephemeral=True)
+
+
+@tree.command(name="update-dilemma-status",
+              description="Adds or Removes a choice to a selected dilemma",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+async def update_dilemma_choices(interaction: discord.Interaction,
+                         dilemma_name: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    latest_round = game.get_latest_round()
+
+    if latest_round is None:
+        await interaction.response.send_message(f'There is currently no active round; you must create an active round first', ephemeral=True)
+    elif not latest_round.is_active_round:
+        await interaction.response.send_message(f'The most recent round is not currently active; the current round must be active to create a dilemma!', ephemeral=True)
+        return
+    else:
+        new_dilemma = Dilemma(dilemma_votes=[], dilemma_id = dilemma_name, dilemma_player_ids=[], dilemma_choices=[], is_active_dilemma=False)
+        latest_round.add_dilemma(new_dilemma)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Created dilemma {new_dilemma.dilemma_id} for round {latest_round.round_number}!', ephemeral=True)
+
 
 @tree.command(name="kill-player",
               description="Toggles a player status of being dead or not.",
@@ -328,6 +467,274 @@ async def vote_report(interaction: discord.Interaction,
         await interaction.followup.send(formatted_votes, ephemeral=False)
 
     #With History to-be-implemented
+
+@tree.command(name="open-private-chat",
+              description="Opens a private chat with the chosen player",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.autocomplete(player=player_list_autocomplete)
+async def open_private_chat(interaction: discord.Interaction,
+                    player: Optional[str] = None):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    guild = interaction.guild
+    discord_user1 = interaction.user
+    player2 = game.get_player(int(player))
+    discord_user2 = await guild.fetch_member(player2.player_id)
+    channel_identifier = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    category_channel = await guild.fetch_channel(PRIVATE_CHAT_CATEGORY)
+
+    overwrites = {
+        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        discord_user1: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        discord_user2: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    }
+
+    private_channel = await guild.create_text_channel(name=f'private-chat-{channel_identifier}', overwrites=overwrites, category=category_channel)
+    await interaction.response.send_message(f'Created private channel with player {player2.player_discord_name}')
+    await private_channel.send(f'Your private chat between {discord_user1.mention} and {discord_user2.mention} has begun!')
+
+
+@tree.command(name="create-party",
+              description="Creates a player party group",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+async def create_party(interaction: discord.Interaction,
+                       party_name: str,
+                       party_max_size: int):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    guild = interaction.guild
+    category_channel = await guild.fetch_channel(PRIVATE_CHAT_CATEGORY)
+
+    overwrites = {
+        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False)
+    }
+
+    party_channel = await guild.create_text_channel(name=f'party-{party_name}', overwrites=overwrites, category=category_channel)
+
+    party = Party(player_ids=[], max_size=party_max_size, channel_id=party_channel.id, party_name=party_name)
+    game.add_party(party)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Created new party {party_name}!', ephemeral=True)
+
+
+@tree.command(name="add-party-player",
+              description="Adds a player to a party and manages text channel permissions",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.autocomplete(player=player_list_autocomplete)
+@app_commands.autocomplete(party=party_list_autocomplete)
+async def add_party_player(interaction: discord.Interaction,
+                           party: str,
+                           player: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    game_party = game.get_party(int(party))
+    game_player = game.get_player(int(player))
+
+    if game_party is None:
+        await interaction.response.send_message(f'Could not find a party with that identifier!', ephemeral=True)
+        return
+
+    if game_player is None:
+        await interaction.response.send_message(f'Could not find a player with that identifier!', ephemeral=True)
+        return
+
+    if len(game_party.player_ids) >= game_party.max_size:
+        await interaction.response.send_message(f'Party size is already at max size of {game_party.max_size}!', ephemeral=True)
+        return
+
+    guild = interaction.guild
+    party_channel = await guild.fetch_channel(game_party.channel_id)
+    player_user = await guild.fetch_member(game_player.player_id)
+
+    existing_party = game.get_player_party(game_player)
+
+    if existing_party is not None:
+        existing_party_channel = await guild.fetch_channel(existing_party.channel_id)
+        await existing_party_channel.set_permissions(player_user, read_messages=False, send_messages=False, read_message_history=False)
+        await existing_party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+        existing_party.remove_player(game_player)
+
+    game_party.add_player(game_player)
+
+    await party_channel.set_permissions(player_user, read_messages=True, send_messages=True, read_message_history=True)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Added player {game_player.player_discord_name} to party {game_party.party_name}!', ephemeral=True)
+    await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
+
+
+@tree.command(name="remove-party-player",
+              description="Removes a player from a party and manages text channel permissions",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.autocomplete(player=player_list_autocomplete)
+async def remove_party_player(interaction: discord.Interaction,
+                              player: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    game_player = game.get_player(int(player))
+
+    if game_player is None:
+        await interaction.response.send_message(f'Could not find a player with that identifier!', ephemeral=True)
+        return
+
+    game_party = game.get_player_party(game_player)
+
+    if game_party is None:
+        await interaction.response.send_message(f'Player {game_player.player_discord_name} is not a member of any current party!', ephemeral=True)
+        return
+
+    guild = interaction.guild
+    party_channel = await guild.fetch_channel(game_party.channel_id)
+    player_user = await guild.fetch_member(game_player.player_id)
+
+    game_party.remove_player(game_player)
+
+    await party_channel.set_permissions(player_user, read_messages=False, send_messages=False, read_message_history=False)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'Removed player {game_player.player_discord_name} from party {game_party.party_name}!', ephemeral=True)
+    await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+
+
+@tree.command(name="join-party",
+              description="Allows a player to join a party and manages text channel permissions",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
+@app_commands.autocomplete(party=party_list_autocomplete)
+async def join_party(interaction: discord.Interaction,
+                     party: str):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    game_party = game.get_party(int(party))
+    game_player = game.get_player(interaction.user.id)
+
+    if game_party is None:
+        await interaction.response.send_message(f'Could not find a party with that identifier!', ephemeral=True)
+        return
+
+    if game_player is None:
+        await interaction.response.send_message(f'You are not a registered player of the current game!', ephemeral=True)
+        return
+    if game_player.is_dead:
+        await interaction.response.send_message(f'You are dead! Begone apparition!', ephemeral=True)
+
+    if len(game_party.player_ids) >= game_party.max_size:
+        await interaction.response.send_message(f'Party size is already at max size of {game_party.max_size}!', ephemeral=True)
+        return
+
+    guild = interaction.guild
+    party_channel = await guild.fetch_channel(game_party.channel_id)
+    player_user = await guild.fetch_member(game_player.player_id)
+    existing_party = game.get_player_party(game_player)
+
+    if existing_party is not None:
+        existing_party_channel = await guild.fetch_channel(existing_party.channel_id)
+        await existing_party_channel.set_permissions(player_user, read_messages=False, send_messages=False, read_message_history=False)
+        await existing_party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+        existing_party.remove_player(game_player)
+
+    game_party.add_player(game_player)
+
+    await party_channel.set_permissions(player_user, read_messages=True, send_messages=True, read_message_history=True)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'You have joined the party {game_party.party_name}!', ephemeral=True)
+    await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
+
+
+@tree.command(name="leave-party",
+              description="Allows a player to leave a party and manages text channel permissions",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
+async def leave_party(interaction: discord.Interaction):
+    log_interaction_call(interaction)
+    game = await game_manager.get_game(file_path=f'{BASE_PATH}/{GAME_FILE}')
+
+    game_player = game.get_player(interaction.user.id)
+
+    if game_player is None:
+        await interaction.response.send_message(f'You are not a registered player of the current game!')
+        return
+    if game_player.is_dead:
+        await interaction.response.send_message(f'You are dead! Begone apparition!')
+
+    game_party = game.get_player_party(game_player)
+
+    if game_party is None:
+        await interaction.response.send_message(f'You are not currently a member of any party!')
+        return
+
+    guild = interaction.guild
+    party_channel = await guild.fetch_channel(game_party.channel_id)
+    player_user = await guild.fetch_member(game_player.player_id)
+
+    game_party.remove_player(game_player)
+
+    await party_channel.set_permissions(player_user, read_messages=False, send_messages=False, read_message_history=False)
+
+    await game_manager.write_game(game=game, file_path=GAME_PATH)
+    await interaction.response.send_message(f'You have left the party {game_party.party_name}!')
+    await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+
+
+@tree.command(name="roll-dice",
+              description="Rolls one or more dice with a specified number of sides",
+              guild=discord.Object(id=GUILD_ID))
+@app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
+async def roll_dice(interaction: discord.Interaction,
+                      dice_to_roll: Literal[1, 2, 3, 4, 5],
+                      die_faces: Literal[2, 4, 6, 8, 10, 12, 20]):
+    log_interaction_call(interaction)
+
+    roll_values = []
+
+    for x in range(0, dice_to_roll):
+        roll_values.append(random.randint(1, die_faces))
+
+    roll_values.sort()
+
+    roll_val_str = ', '.join(map(str, roll_values))
+
+    roll_message = f'Rolling {dice_to_roll} d{die_faces}...'
+    result_message = f'Rolled values: {roll_val_str}'
+
+    await interaction.response.send_message(roll_message, ephemeral=False)
+    await interaction.followup.send(result_message, ephemeral=False)
+
+
+# @tree.command(name="action-success-roll",
+#               description="Computes success and dice roll result for an action",
+#               guild=discord.Object(id=GUILD_ID))
+# @app_commands.default_permissions(manage_guild=True)
+# async def action_success_roll(interaction: discord.Interaction,
+#                           source_skill_level: app_commands.Range[int, 0, 100],
+#                           target_skill_level: app_commands.Range[int, 0, 100],
+#                           with_modifier: Optional[Literal[True, False]]):
+#     await interaction.response.send_message("Not implemented yet!")
+#
+# @tree.command(name="action-result-roll",
+#               description="Computes value of one or more dice rolls",
+#               guild=discord.Object(id=GUILD_ID))
+# @app_commands.default_permissions(manage_guild=True)
+# async def action_result_roll(interaction: discord.Interaction,
+#                              base_source_value: app_commands.Range[int, 0, 20],
+#                              base_target_reduction: app_commands.Range[int, 0, 20],
+#                              d1_faces: Literal[2,4,6,8,10,12,20],
+#                              d1_to_roll: app_commands.Range[int, 1, 5],
+#                              d1_target_resistance: Optional[app_commands.Range[0,10]] = 0,
+#                              d2_faces: Optional[Literal[2,4,6,8,10,12,20]] = 4,
+#                              d2_to_roll: Optional[app_commands.Range[int, 0, 5]] = 0,
+#                              d2_target_resistance: Optional[app_commands.Range[0,10]] = 0):
+#     await interaction.response.send_message("Not implemented yet!")
 
 
 @tree.command(name="cycle-game-conf",
