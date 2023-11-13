@@ -3,6 +3,7 @@
 
 import os
 import logging
+import discord
 from logging.handlers import TimedRotatingFileHandler
 from dotenv import load_dotenv
 
@@ -32,6 +33,9 @@ def create_logger(path):
     created_logger.setLevel(logging.INFO)
 
     return created_logger
+
+def log_interaction_call(interaction: discord.Interaction):
+    logger.info(f'Received command {interaction.command.name} with parameters {interaction.data} initiated by user {interaction.user.name}')
 
 
 logger = create_logger(BASE_PATH)
