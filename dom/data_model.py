@@ -2,8 +2,7 @@
 # a class for managing game state details
 import json
 from typing import Optional, List, Dict
-from logging_manager import logger
-from datetime import datetime
+from archive.logging_manager import logger
 
 
 class Embed:

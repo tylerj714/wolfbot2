@@ -2,15 +2,14 @@
 import os
 import discord
 from dotenv import load_dotenv
-from discord import app_commands, Member, Guild, User
-from typing import List, Optional, Literal, Dict
+from discord import app_commands, User
+from typing import List, Optional, Literal
 import game_manager
 from game_manager import Game, Player, Round, Vote, Party, Dilemma
 from logging_manager import logger
 import time
 import random
 import string
-import emoji_manager
 import game_configurations
 
 load_dotenv()

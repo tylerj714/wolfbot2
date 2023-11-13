@@ -1,18 +1,8 @@
 # wolfbot.py
-import os
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
-from discord import app_commands, Member, Guild, User
-from typing import List, Optional, Literal, Dict
-import dom.data_model as gdm
-from dom.data_model import Game, Player, Round, Vote, Party, Dilemma
+from discord import app_commands
 from bot_logging.logging_manager import logger
-import time
-import random
-import string
-import emoji_manager
-import game_configurations
 from dom.conf_vars import ConfVars as Conf
 
 class WolfBot(commands.Bot):
