@@ -1,7 +1,7 @@
 #! game_manager.py
 # a class for managing game state details
 import json
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Set
 from archive.logging_manager import logger
 
 
@@ -64,9 +64,12 @@ class Vote:
 
 
 class Dilemma:
-    def __init__(self, dilemma_votes: List[Vote], dilemma_id: str, dilemma_player_ids: [int], dilemma_choices: [str], is_active_dilemma: bool):
+    def __init__(self, dilemma_votes: List[Vote], dilemma_name: str, dilemma_channel_id: int, dilemma_message_id: int,
+                 dilemma_player_ids: Set[int], dilemma_choices: Set[str], is_active_dilemma: bool):
         self.dilemma_votes = dilemma_votes
-        self.dilemma_id = dilemma_id
+        self.dilemma_name = dilemma_name
+        self.dilemma_channel_id = dilemma_channel_id
+        self.dilemma_message_id = dilemma_message_id
         self.dilemma_player_ids = dilemma_player_ids
         self.dilemma_choices = dilemma_choices
         self.is_active_dilemma = is_active_dilemma
@@ -84,34 +87,41 @@ class Dilemma:
     def remove_vote(self, vote: Vote):
         self.dilemma_votes.remove(vote)
 
+    def add_player(self, player: Player):
+        self.dilemma_player_ids.add(player.player_id)
+
+    def remove_player(self, player: Player):
+        self.dilemma_player_ids.remove(player.player_id)
+
+    def add_choice(self, choice: str):
+        self.dilemma_choices.add(choice)
+
+    def remove_choice(self, choice: str):
+        self.dilemma_choices.remove(choice)
 
 class Party:
-    def __init__(self, player_ids: List[int], party_name: str, max_size: int, channel_id: int):
+    def __init__(self, player_ids: Set[int], party_name: str, max_size: int, channel_id: int):
         self.player_ids = player_ids
         self.channel_id = channel_id
         self.party_name = party_name
         self.max_size = max_size
 
     def add_player(self, player: Player):
-        self.player_ids.append(player.player_id)
+        self.player_ids.add(player.player_id)
 
     def remove_player(self, player: Player):
         self.player_ids.remove(player.player_id)
 
 
 class Round:
-    def __init__(self, votes: List[Vote], round_number: int, round_dilemmas: [Dilemma], is_active_round: bool):
+    def __init__(self, votes: List[Vote], round_channel_id: int, round_message_id: int, round_number: int,
+                 round_dilemmas: List[Dilemma], is_active_round: bool):
         self.votes = votes
+        self.round_channel_id = round_channel_id
+        self.round_message_id = round_message_id
         self.round_dilemmas = round_dilemmas
         self.round_number = round_number
         self.is_active_round = is_active_round
-
-    def get_player_dilemma(self, player_id: int) -> Optional[Dilemma]:
-        player_dilemma = None
-        for dilemma in self.round_dilemmas:
-            if player_id in dilemma.dilemma_player_ids:
-                player_dilemma = dilemma
-        return player_dilemma
 
     def add_dilemma(self, dilemma: Dilemma):
         self.round_dilemmas.append(dilemma)
@@ -119,6 +129,16 @@ class Round:
     def close_dilemmas(self):
         for dilemma in self.round_dilemmas:
             dilemma.is_active_dilemma = False
+
+    def get_dilemmas(self):
+        return self.round_dilemmas
+
+    def get_dilemma(self, dilemma_name) -> Optional[Dilemma]:
+        player_dilemma = None
+        for a_dilemma in self.round_dilemmas:
+            if dilemma_name == a_dilemma.dilemma_name:
+                player_dilemma = a_dilemma
+        return player_dilemma
 
     def get_player_vote(self, player_id: int) -> Optional[Vote]:
         player_vote = None
@@ -133,10 +153,12 @@ class Round:
     def remove_vote(self, vote: Vote):
         self.votes.remove(vote)
 
-
 class Game:
-    def __init__(self, is_active: bool, players: List[Player], parties: List[Party], rounds: List[Round]):
+    def __init__(self, is_active: bool, parties_locked: bool, voting_locked: bool, players: List[Player],
+                 parties: List[Party], rounds: List[Round]):
         self.is_active = is_active
+        self.parties_locked = parties_locked
+        self.voting_locked = voting_locked
         self.players = players
         self.rounds = rounds
         self.parties = parties
@@ -195,6 +217,8 @@ def read_json_to_dom(filepath: str) -> Game:
         json_object = json.load(openfile)
 
         is_active = json_object.get("is_active")
+        parties_locked = json_object.get("parties_locked")
+        voting_locked = json_object.get("voting_locked")
         players = []
         rounds = []
         parties = []
@@ -235,6 +259,8 @@ def read_json_to_dom(filepath: str) -> Game:
 
         if json_object.get("rounds") is not None:
             for round_entry in json_object.get("rounds"):
+                round_channel_id = round_entry.get("round_channel_id")
+                round_message_id = round_entry.get("round_message_id")
                 round_num = round_entry.get("round_number")
                 is_active_round = round_entry.get("is_active_round")
                 votes = []
@@ -247,29 +273,33 @@ def read_json_to_dom(filepath: str) -> Game:
                         votes.append(Vote(player_id=player_id,
                                           choice=choice,
                                           timestamp=timestamp))
-                for dilemma_entry in json_object.get("dilemmas"):
-                    dilemma_id = dilemma_entry.get("dilemma_id")
-                    is_active_dilemma = dilemma_entry.get("is_active_dilemma")
-                    dilemma_choices = dilemma_entry.get("dilemma_choices")
-                    dilemma_votes = []
-                    dilemma_player_ids = []
-                    if dilemma_entry.get("dilemma_player_ids") is not None:
-                        for player_id in dilemma_entry.get("dilemma_player_ids"):
-                            dilemma_player_ids.append(player_id)
-                    if dilemma_entry.get("votes") is not None:
-                        for dilemma_vote_entry in dilemma_entry.get("votes"):
-                            player_id = dilemma_vote_entry.get("player_id")
-                            choice = dilemma_vote_entry.get("choice")
-                            timestamp = dilemma_vote_entry.get("timestamp")
-                            dilemma_votes.append(Vote(player_id=player_id,
-                                                      choice=choice,
-                                                      timestamp=timestamp))
-                    round_dilemmas.append(Dilemma(dilemma_id=dilemma_id,
-                                                  dilemma_player_ids=dilemma_player_ids,
-                                                  dilemma_choices=dilemma_choices,
-                                                  dilemma_votes=dilemma_votes,
-                                                  is_active_dilemma=is_active_dilemma))
+                if round_entry.get("round_dilemmas") is not None:
+                    for dilemma_entry in round_entry.get("round_dilemmas"):
+                        dilemma_name = dilemma_entry.get("dilemma_name")
+                        dilemma_channel_id = dilemma_entry.get("dilemma_channel_id")
+                        dilemma_message_id = dilemma_entry.get("dilemma_message_id")
+                        is_active_dilemma = dilemma_entry.get("is_active_dilemma")
+                        dilemma_choices = set(dilemma_entry.get("dilemma_choices"))
+                        dilemma_player_ids = set(dilemma_entry.get("dilemma_player_ids"))
+                        dilemma_votes = []
+                        if dilemma_entry.get("dilemma_votes") is not None:
+                            for dilemma_vote_entry in dilemma_entry.get("dilemma_votes"):
+                                player_id = dilemma_vote_entry.get("player_id")
+                                choice = dilemma_vote_entry.get("choice")
+                                timestamp = dilemma_vote_entry.get("timestamp")
+                                dilemma_votes.append(Vote(player_id=player_id,
+                                                          choice=choice,
+                                                          timestamp=timestamp))
+                        round_dilemmas.append(Dilemma(dilemma_name=dilemma_name,
+                                                      dilemma_channel_id=dilemma_channel_id,
+                                                      dilemma_message_id=dilemma_message_id,
+                                                      dilemma_player_ids=dilemma_player_ids,
+                                                      dilemma_choices=dilemma_choices,
+                                                      dilemma_votes=dilemma_votes,
+                                                      is_active_dilemma=is_active_dilemma))
                 rounds.append(Round(round_number=round_num,
+                                    round_channel_id=round_channel_id,
+                                    round_message_id=round_message_id,
                                     round_dilemmas=round_dilemmas,
                                     is_active_round=is_active_round,
                                     votes=votes))
@@ -278,26 +308,31 @@ def read_json_to_dom(filepath: str) -> Game:
                 channel_id = party_entry.get("channel_id")
                 max_size = party_entry.get("max_size")
                 party_name = party_entry.get("party_name")
-                player_ids = []
-                if party_entry.get("player_ids") is not None:
-                    for player_id in party_entry.get("player_ids"):
-                        player_ids.append(player_id)
+                player_ids = set(party_entry.get("player_ids"))
                 parties.append(Party(player_ids=player_ids,
                                      party_name=party_name,
                                      channel_id=channel_id,
                                      max_size=max_size))
 
         return Game(is_active=is_active,
+                    parties_locked=parties_locked,
+                    voting_locked=voting_locked,
                     players=players,
                     rounds=rounds,
                     parties=parties)
 
+# async def serialization_defaults(obj):
+#     if isinstance(obj, set):
+#         return list(obj)
+#     raise TypeError
 
 def write_dom_to_json(game: Game, filepath: str):
     with open(filepath, 'w', encoding="utf8") as outfile:
 
         # convert Game to dictionary here
-        game_dict = {"is_active": game.is_active}
+        game_dict = {"is_active": game.is_active,
+                     "parties_locked": game.parties_locked,
+                     "voting_locked": game.voting_locked}
         player_dicts = []
         for player in game.players:
             attribute_dicts = []
@@ -329,34 +364,33 @@ def write_dom_to_json(game: Game, filepath: str):
                                    "choice": vote.choice,
                                    "timestamp": vote.timestamp})
             for a_dilemma in a_round.round_dilemmas:
-                dilemma_id = a_dilemma.dilemma_id
-                dilemma_choices = a_dilemma.dilemma_choices
-                dilemma_player_ids = a_dilemma.dilemma_player_ids
-                is_active_dilemma = a_dilemma.is_active_dilemma
                 dilemma_vote_dicts = []
                 for dilemma_vote in a_dilemma.dilemma_votes:
                     dilemma_vote_dicts.append({"player_id": dilemma_vote.player_id,
                                                "choice": dilemma_vote.choice,
                                                "timestamp": dilemma_vote.timestamp})
-                dilemma_dicts.append({"dilemma_id": dilemma_id,
-                                      "dilemma_player_ids": dilemma_player_ids,
-                                      "dilemma_choices": dilemma_choices,
+                dilemma_dicts.append({"dilemma_name": a_dilemma.dilemma_name,
+                                      "dilemma_channel_id": a_dilemma.dilemma_channel_id,
+                                      "dilemma_message_id": a_dilemma.dilemma_message_id,
+                                      "dilemma_player_ids": list(a_dilemma.dilemma_player_ids),
+                                      "dilemma_choices": list(a_dilemma.dilemma_choices),
                                       "dilemma_votes": dilemma_vote_dicts,
-                                      "is_active_dilemma": is_active_dilemma})
+                                      "is_active_dilemma": a_dilemma.is_active_dilemma})
             round_dicts.append({"round_number": a_round.round_number,
+                                "round_channel_id": a_round.round_channel_id,
+                                "round_message_id": a_round.round_message_id,
                                 "is_active_round": a_round.is_active_round,
                                 "votes": vote_dicts,
                                 "round_dilemmas": dilemma_dicts})
         game_dict["rounds"] = round_dicts
         party_dicts = []
         for a_party in game.parties:
-            party_dicts.append({"player_ids": a_party.player_ids,
+            party_dicts.append({"player_ids": list(a_party.player_ids),
                                 "party_name": a_party.party_name,
                                 "channel_id": a_party.channel_id,
                                 "max_size": a_party.max_size})
         game_dict["parties"] = party_dicts
         json.dump(game_dict, outfile, indent=2, ensure_ascii=False)
-
 
 async def get_game(file_path: str) -> Game:
     logger.info(f'Grabbing game info from {file_path}')
