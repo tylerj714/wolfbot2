@@ -17,51 +17,56 @@ class DiceManager(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="roll-dice",
-                          description="Rolls one or more dice with a specified number of sides")
+                          description="Rolls dice with a specified number of sides with optional modifier")
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
     async def roll_dice(self, interaction: discord.Interaction,
                         dice_to_roll: Literal[1, 2, 3, 4, 5],
-                        die_faces: Literal[2, 4, 6, 8, 10, 12, 20]):
+                        die_faces: Literal[2, 4, 6, 8, 10, 12, 20],
+                        with_modifier: Optional[Literal['Advantage', 'Disadvantage']]):
         log_interaction_call(interaction)
 
         roll_values = []
+        roll_values_alt = []
 
         for x in range(0, dice_to_roll):
-            roll_values.append(random.randint(1, die_faces))
+            roll_value1: int = random.randint(1, die_faces)
+            roll_value2: int = random.randint(1, die_faces)
+            if with_modifier is not None:
+                if with_modifier == 'Advantage':
+                    if roll_value1 >= roll_value2:
+                        roll_values.append(roll_value1)
+                        roll_values_alt.append(roll_value2)
+                    else:
+                        roll_values.append(roll_value2)
+                        roll_values_alt.append(roll_value1)
+                else:
+                    if roll_value1 <= roll_value2:
+                        roll_values.append(roll_value1)
+                        roll_values_alt.append(roll_value2)
+                    else:
+                        roll_values.append(roll_value2)
+                        roll_values_alt.append(roll_value1)
+            else:
+                roll_values.append(roll_value1)
 
         roll_values.sort()
+        roll_values_alt.sort()
 
-        roll_val_str = ', '.join(map(str, roll_values))
+        roll_val_str = ','.join(map(str, roll_values))
+        roll_val_alt_str = ','.join(map(str, roll_values_alt))
 
-        roll_message = f'Rolling {dice_to_roll} d{die_faces}...'
-        result_message = f'Rolled values: {roll_val_str}'
+        roll_message = ""
+        result_message = ""
+        if with_modifier is not None:
+            roll_message += f'Rolling {dice_to_roll} d{die_faces} with {with_modifier}...'
+            result_message += f'Rolled values: {roll_val_str}\n'
+            result_message += f'Discarded rolled values: ~~{roll_val_alt_str}~~'
+        else:
+            roll_message += f'Rolling {dice_to_roll} d{die_faces}...'
+            result_message += f'Rolled values: {roll_val_str}'
 
         await interaction.response.send_message(roll_message, ephemeral=False)
         await interaction.followup.send(result_message, ephemeral=False)
-
-    # @app_commands.command(name="action-success-roll",
-    #                       description="Computes success and dice roll result for an action")
-    # @app_commands.default_permissions(manage_guild=True)
-    # async def action_success_roll(self, interaction: discord.Interaction,
-    #                               source_skill_level: app_commands.Range[int, 0, 100],
-    #                               target_skill_level: app_commands.Range[int, 0, 100],
-    #                               with_modifier: Optional[Literal[True, False]]):
-    #     await interaction.response.send_message("Not implemented yet!")
-    #
-    # @app_commands.command(name="action-result-roll",
-    #                       description="Computes value of one or more dice rolls")
-    # @app_commands.default_permissions(manage_guild=True)
-    # async def action_result_roll(self,
-    #                              interaction: discord.Interaction,
-    #                              base_source_value: app_commands.Range[int, 0, 20],
-    #                              base_target_reduction: app_commands.Range[int, 0, 20],
-    #                              d1_faces: Literal[2, 4, 6, 8, 10, 12, 20],
-    #                              d1_to_roll: app_commands.Range[int, 1, 5],
-    #                              d1_target_resistance: Optional[app_commands.Range[0, 10]] = 0,
-    #                              d2_faces: Optional[Literal[2, 4, 6, 8, 10, 12, 20]] = 4,
-    #                              d2_to_roll: Optional[app_commands.Range[int, 0, 5]] = 0,
-    #                              d2_target_resistance: Optional[app_commands.Range[0, 10]] = 0):
-    #     await interaction.response.send_message("Not implemented yet!")
 
 
 async def setup(bot: commands.Bot) -> None:

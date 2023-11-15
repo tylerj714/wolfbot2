@@ -8,6 +8,7 @@ import dom.data_model as gdm
 from dom.data_model import Game, Player, Round, Vote, Party, Dilemma
 from dom.conf_vars import ConfVars as Conf
 
+
 async def player_list_autocomplete(interaction: discord.Interaction,
                                    current: str) -> List[app_commands.Choice[str]]:
     game = await gdm.get_game(file_path=Conf.GAME_PATH)
@@ -31,7 +32,8 @@ async def party_list_autocomplete(interaction: discord.Interaction,
     game = await gdm.get_game(file_path=Conf.GAME_PATH)
     parties = await get_valid_parties(current, game.parties)
     return [
-        app_commands.Choice(name=f'{party.party_name} ({len(party.player_ids)}/{party.max_size})', value=str(party.channel_id))
+        app_commands.Choice(name=f'{party.party_name} ({len(party.player_ids)}/{party.max_size})',
+                            value=str(party.channel_id))
         for party in parties
     ]
 
@@ -40,25 +42,55 @@ async def get_valid_parties(substr: str, parties: List[Party]) -> List[Party]:
     for party in sorted(parties, key=lambda e: e.party_name.lower()):
         if substr and substr.lower() not in party.party_name.lower():
             continue
-        # if not len(party.player_ids) >= party.max_size:
         party_list.append(party)
     return party_list[:25]
+
+async def dilemma_name_autocomplete(interaction: discord.Interaction,
+                                    current: str) -> List[app_commands.Choice[str]]:
+    game = await gdm.get_game(file_path=Conf.GAME_PATH)
+    guild_member = await interaction.guild.fetch_member(interaction.user.id)
+    dilemma_names = await get_valid_dilemma_names(current, game, guild_member)
+    return [
+        app_commands.Choice(name=dilemma_name, value=dilemma_name)
+        for dilemma_name in dilemma_names
+    ]
+
+async def get_valid_dilemma_names(substr: str, game: Game, member: Member) -> List[str]:
+    name_list = []
+    dilemma_list = []
+    game_round = game.get_latest_round()
+    if game_round is not None:
+        if member.guild_permissions.manage_guild:
+            dilemma_list.append(game_round.round_dilemmas)
+        else:
+            for round_dilemma in game_round.round_dilemmas:
+                if member.id in round_dilemma.dilemma_player_ids:
+                    dilemma_list.append(round_dilemma)
+        round_dilemmas = game_round.round_dilemmas
+        for round_dilemma in round_dilemmas:
+            if substr and substr.lower() not in round_dilemma.dilemma_name.lower():
+                continue
+            name_list.append(round_dilemma.dilemma_name)
+    return name_list[:25]
 
 async def dilemma_choice_autocomplete(interaction: discord.Interaction,
                                       current: str) -> List[app_commands.Choice[str]]:
     game = await gdm.get_game(file_path=Conf.GAME_PATH)
-    dilemma_choices = await get_valid_dilemma_choices(current, game, interaction.user)
+    dilemma_name = interaction.namespace.dilemma_name
+    dilemma_choices = await get_valid_dilemma_choices(current, game, dilemma_name)
     return [
         app_commands.Choice(name=choice, value=choice)
         for choice in dilemma_choices
     ]
 
-async def get_valid_dilemma_choices(substr: str, game: Game, user: User) -> List[str]:
+
+async def get_valid_dilemma_choices(substr: str, game: Game, dilemma_name: str) -> List[str]:
     choice_list = []
-    game_round = game.get_latest_round
+    game_round = game.get_latest_round()
     if game_round is not None:
-        round_dilemma = game_round.get_player_dilemma(user.id)
-        if round_dilemma is not None:
-            for dilemma_choice in round_dilemma.dilemma_choices:
-                choice_list.append(dilemma_choice)
+        dilemma = game_round.get_dilemma(dilemma_name)
+        for dilemma_choice in dilemma.dilemma_choices:
+            if substr and substr.lower() not in dilemma_choice.lower():
+                continue
+            choice_list.append(dilemma_choice)
     return choice_list[:25]
