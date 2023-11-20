@@ -112,7 +112,7 @@ class VotingManager(commands.Cog):
                               round_number=latest_round.round_number + 1, is_active_round=True)
             game.add_round(new_round)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'Created round {new_round.round_number}!', ephemeral=True)
 
     @app_commands.command(name="round-end",
@@ -131,7 +131,7 @@ class VotingManager(commands.Cog):
         else:
             latest_round.is_active_round = False
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'Ended round {latest_round.round_number}!', ephemeral=True)
 
     @app_commands.command(name="round-vote",
@@ -201,7 +201,7 @@ class VotingManager(commands.Cog):
                 round_current_player_vote.choice = str(voted_player.player_id)
                 round_current_player_vote.timestamp = round(time.time())
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
 
         await update_report_message(interaction=interaction, channel_id=latest_round.round_channel_id,
                                     message_id=latest_round.round_message_id,
@@ -293,7 +293,7 @@ class VotingManager(commands.Cog):
                                   is_active_dilemma=False)
             latest_round.add_dilemma(new_dilemma)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(
             f'Created dilemma {new_dilemma.dilemma_name} for round {latest_round.round_number}!', ephemeral=True)
 
@@ -349,7 +349,7 @@ class VotingManager(commands.Cog):
                 await interaction.response.send_message(
                     f'Removed all players in {channel.name} with role {role.name} from dilemma {round_dilemma.dilemma_name}!',
                     ephemeral=True)
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
 
     @app_commands.command(name="dilemma-update-player",
                           description="Adds or removes a player from a selected dilemma")
@@ -397,7 +397,7 @@ class VotingManager(commands.Cog):
                 await interaction.response.send_message(
                     f'Removed player {game_player.player_discord_name} from dilemma {round_dilemma.dilemma_name}!',
                     ephemeral=True)
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
 
     @app_commands.command(name="dilemma-update-choices",
                           description="Adds or Removes a choice to a selected dilemma")
@@ -442,7 +442,7 @@ class VotingManager(commands.Cog):
                 await interaction.response.send_message(
                     f'Removed choice {dilemma_choice_remove} from dilemma {round_dilemma.dilemma_name}!',
                     ephemeral=True)
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
 
     @app_commands.command(name="dilemma-vote",
                           description="Votes for a particular dilemma choice")
@@ -492,7 +492,7 @@ class VotingManager(commands.Cog):
             dilemma_current_player_vote.choice = dilemma_choice
             dilemma_current_player_vote.timestamp = round(time.time())
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
 
         await update_report_message(interaction=interaction, channel_id=player_dilemma.dilemma_channel_id,
                                     message_id=player_dilemma.dilemma_message_id,

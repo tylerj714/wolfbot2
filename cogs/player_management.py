@@ -45,7 +45,7 @@ class PlayerManager(commands.Cog):
                                 player_attributes=[],
                                 player_actions=[])
             game.add_player(new_player)
-            await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+            await gdm.write_game(game=game)
             await interaction.response.send_message(f'Added player {player.name} to game!', ephemeral=True)
         else:
             await interaction.response.send_message(f'Failed to add {player.name} to game!', ephemeral=True)
@@ -68,7 +68,7 @@ class PlayerManager(commands.Cog):
         else:
             this_player.is_dead = True if dead == 'True' else False
 
-            await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+            await gdm.write_game(game=game)
             await interaction.response.send_message(f'Set alive status of {this_player.player_discord_name} to {dead}!',
                                                     ephemeral=True)
 
@@ -122,7 +122,7 @@ class PlayerManager(commands.Cog):
         party = Party(player_ids=[], max_size=party_max_size, channel_id=party_channel.id, party_name=party_name)
         game.add_party(party)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'Created new party {party_name}!', ephemeral=True)
 
     @app_commands.command(name="add-party-player",
@@ -170,7 +170,7 @@ class PlayerManager(commands.Cog):
         await party_channel.set_permissions(player_user, read_messages=True, send_messages=True,
                                             read_message_history=True)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(
             f'Added player {game_player.player_discord_name} to party {game_party.party_name}!', ephemeral=True)
         await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
@@ -206,7 +206,7 @@ class PlayerManager(commands.Cog):
         await party_channel.set_permissions(player_user, read_messages=False, send_messages=False,
                                             read_message_history=False)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(
             f'Removed player {game_player.player_discord_name} from party {game_party.party_name}!', ephemeral=True)
         await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
@@ -256,7 +256,7 @@ class PlayerManager(commands.Cog):
         await party_channel.set_permissions(player_user, read_messages=True, send_messages=True,
                                             read_message_history=True)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'You have joined the party {game_party.party_name}!', ephemeral=True)
         await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
 
@@ -290,7 +290,7 @@ class PlayerManager(commands.Cog):
         await party_channel.set_permissions(player_user, read_messages=False, send_messages=False,
                                             read_message_history=False)
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'You have left the party {game_party.party_name}!')
         await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
 

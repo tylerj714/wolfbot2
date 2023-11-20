@@ -1,4 +1,4 @@
-# wolfbot.py
+# wolfbot2.py
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -16,6 +16,8 @@ class WolfBot(commands.Bot):
         await self.load_extension(f"cogs.player_management")
         await self.load_extension(f"cogs.voting")
         await self.load_extension(f"cogs.dice_rolling")
+        await self.load_extension(f"cogs.action_item_management")
+        await self.load_extension(f"cogs.moderator_request_management")
         await bot.tree.sync(guild=discord.Object(id=Conf.GUILD_ID))
 
     async def on_ready(self):
