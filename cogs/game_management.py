@@ -1,20 +1,128 @@
 #! game_management.py
 # Class with slash commands managing game state
 
+import os
 import discord
 from discord import app_commands
 from discord.ext import commands
 from dom.conf_vars import ConfVars as Conf
 from typing import Literal
 import dom.data_model as gdm
+from dom.data_model import Game
 from bot_logging.logging_manager import log_interaction_call
-import random
-import string
 
 
 class GameManager(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+
+    @app_commands.command(name="initialize-game",
+                          description="Creates a Game and saves the data to the defined json file")
+    @app_commands.default_permissions(manage_guild=True)
+    async def initialize_game(self,
+                              interaction: discord.Interaction,
+                              create_channels: Literal['True', 'False']):
+        log_interaction_call(interaction)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        if os.path.exists(Conf.GAME_PATH):
+            await interaction.followup.send(f'Game file already exists! Delete the game file or change the '
+                                                 f'config to point to a new location or file!')
+            return
+
+        generate_channels = True if create_channels == 'True' else False
+
+        actions = await gdm.read_actions_file(Conf.ACTION_PATH) if Conf.ACTION_PATH else []
+        action_map = gdm.map_action_list(actions)
+        items = await gdm.read_items_file(Conf.ITEM_PATH, game_actions=action_map) if Conf.ITEM_PATH else []
+        item_map = gdm.map_item_list(items)
+        players = await gdm.read_players_file(Conf.PLAYER_PATH, game_actions=action_map,
+                                              game_items=item_map) if Conf.PLAYER_PATH else []
+        player_map = gdm.map_player_list(players)
+        parties = await gdm.read_parties_file(Conf.PARTY_PATH) if Conf.PARTY_PATH else []
+
+        # If generate channels is enabled, generate channels for players and parties, if they are defined
+        if generate_channels:
+            category_channel = await interaction.guild.fetch_channel(Conf.MOD_CATEGORY)
+
+            for player in players:
+                discord_member = await interaction.guild.fetch_member(player.player_id)
+                if player.player_mod_channel is None:
+                    overwrites = {
+                        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                        discord_member: discord.PermissionOverwrite(read_messages=True, send_messages=False)
+                    }
+
+                    mod_channel_name = f'mod-{player.player_discord_name}'
+                    mod_channel = await interaction.guild.create_text_channel(name=mod_channel_name,
+                                                                              overwrites=overwrites,
+                                                                              category=category_channel)
+                    player.player_mod_channel = mod_channel.id
+
+            private_chat_channel = await interaction.guild.fetch_channel(Conf.PRIVATE_CHAT_CATEGORY)
+            for party in parties:
+                if party.channel_id is None:
+                    overwrites = {
+                        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False)
+                    }
+
+                    party_channel_name = f'party-{party.party_name}'
+                    party_channel = await interaction.guild.create_text_channel(name=party_channel_name,
+                                                                                overwrites=overwrites,
+                                                                                category=private_chat_channel)
+                    party.channel_id = party_channel.id
+
+                    for player_id in party.player_ids:
+                        party_player = player_map[player_id]
+                        party_member = await interaction.guild.fetch_member(player_id)
+                        await party_channel.set_permissions(party_member, read_messages=True, send_messages=True,
+                                                            read_message_history=True)
+                        await party_channel.send(f'**{party_player.player_discord_name}** has joined the party!')
+
+        game = Game(is_active=False, parties_locked=True, voting_locked=True, players=players, parties=parties,
+                    rounds=[], actions=actions, items=items)
+
+        await gdm.write_game(game=game)
+
+        await interaction.followup.send(f'Initialized a new game at file location {Conf.GAME_PATH}')
+
+    @app_commands.command(name="update-game-actions",
+                          description="Updates the existing game with a new version of actions from the actions file")
+    @app_commands.default_permissions(manage_guild=True)
+    async def update_game_actions(self,
+                                  interaction: discord.Interaction):
+        log_interaction_call(interaction)
+
+        game = gdm.read_json_to_dom(filepath=Conf.GAME_PATH)
+
+        # TODO: Check if game exists, if it doesn't fail out
+
+        actions = await gdm.read_actions_file(Conf.ACTION_PATH) if Conf.ACTION_PATH else []
+
+        game.actions = actions
+
+        await gdm.write_game(game=game)
+
+        await interaction.response.send_message(f'Updated game actions!')
+
+    @app_commands.command(name="update-game-items",
+                          description="Updates the existing game with a new version of items from the items file")
+    @app_commands.default_permissions(manage_guild=True)
+    async def update_game_items(self,
+                                interaction: discord.Interaction):
+        log_interaction_call(interaction)
+
+        game = gdm.read_json_to_dom(filepath=Conf.GAME_PATH)
+
+        # TODO: Check if game exists, if it doesn't fail out
+
+        items = await gdm.read_actions_file(Conf.ITEM_PATH) if Conf.ITEM_PATH else []
+
+        game.items = items
+
+        await gdm.write_game(game=game)
+
+        await interaction.response.send_message(f'Updated game actions!')
 
     @app_commands.command(name="toggle-game-active-state",
                           description="Enables/Disables bot commands for players")
@@ -27,7 +135,7 @@ class GameManager(commands.Cog):
 
         game.is_active = True if is_active == 'True' else False
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'Game active state has been set to {is_active}!', ephemeral=True)
 
     @app_commands.command(name="party-toggle-lock-state",
@@ -41,8 +149,22 @@ class GameManager(commands.Cog):
 
         game.parties_locked = True if is_locked == 'True' else False
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'Party functionality lock state set to {is_locked}!', ephemeral=True)
+
+    @app_commands.command(name="items-toggle-lock-state",
+                          description="Enables/Disables bot commands for item functionality for players only")
+    @app_commands.default_permissions(manage_guild=True)
+    async def items_toggle_lock_state(self,
+                                      interaction: discord.Interaction,
+                                      is_locked: Literal['True', 'False']):
+        log_interaction_call(interaction)
+        game = await gdm.get_game(file_path=Conf.GAME_PATH)
+
+        game.items_locked = True if is_locked == 'True' else False
+
+        await gdm.write_game(game=game)
+        await interaction.response.send_message(f'Item functionality lock state set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="voting-toggle-lock-state",
                           description="Enables/Disables bot commands for Voting functionality for players only")
@@ -55,7 +177,7 @@ class GameManager(commands.Cog):
 
         game.voting_locked = True if is_locked == 'True' else False
 
-        await gdm.write_game(game=game, file_path=Conf.GAME_PATH)
+        await gdm.write_game(game=game)
         await interaction.response.send_message(f'Voting functionality lock state set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="clear-messages",
@@ -74,6 +196,28 @@ class GameManager(commands.Cog):
         await interaction.response.send_message(f"Clearing messages from channel {channel.name}")
         await channel.purge(limit=100)
 
+    @app_commands.command(name="delete-channels",
+                          description="Deletes all channels in the chosen category")
+    @app_commands.default_permissions(manage_guild=True)
+    async def delete_channels(self,
+                              interaction: discord.Interaction,
+                              channel: discord.CategoryChannel,
+                              channel_again: discord.CategoryChannel,
+                              delete_category: Literal['True','False']):
+        log_interaction_call(interaction)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        if channel != channel_again:
+            await interaction.followup.send_message(
+                f'Both channel arguments must be the same! This is a safety feature!', ephemeral=True)
+
+        for sub_channel in channel.channels:
+            await sub_channel.delete()
+
+        if delete_category == 'True':
+            await channel.delete()
+
+        await interaction.followup.send(f'Deleted channels for category {channel.name}!', ephemeral=True)
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(GameManager(bot), guilds=[discord.Object(id=Conf.GUILD_ID)])
