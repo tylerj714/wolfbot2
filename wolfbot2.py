@@ -2,8 +2,9 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from bot_logging.logging_manager import logger
+from bot_logging.logging_manager import logger, log_info
 from dom.conf_vars import ConfVars as Conf
+
 
 class WolfBot(commands.Bot):
     def __init__(self):
@@ -11,20 +12,27 @@ class WolfBot(commands.Bot):
         self.synced = False
 
     async def setup_hook(self):
-        await self.load_extension(f"cogs.test")
+        # await self.load_extension(f"cogs.test")
         await self.load_extension(f"cogs.game_management")
         await self.load_extension(f"cogs.player_management")
         await self.load_extension(f"cogs.voting")
         await self.load_extension(f"cogs.dice_rolling")
         await self.load_extension(f"cogs.action_item_management")
         await self.load_extension(f"cogs.moderator_request_management")
-        await bot.tree.sync(guild=discord.Object(id=Conf.GUILD_ID))
+        await self.load_extension(f"cogs.emoji_manager")
+        guild = discord.Object(id=Conf.GUILD_ID)
+        self.tree.copy_global_to(guild=guild)
+        synced_app_commands = await self.tree.sync(guild=guild)
+        for command in synced_app_commands:
+            log_info(f'Synced command: {command.name}')
 
     async def on_ready(self):
         await self.wait_until_ready()
         print(f"We have logged in as {self.user}.")
 
+
 bot = WolfBot()
+
 
 @bot.event
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -36,7 +44,8 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 
 def log_interaction_call(interaction: discord.Interaction):
-    logger.info(f'Received command {interaction.command.name} with parameters {interaction.data} initiated by user {interaction.user.name}')
+    logger.info(
+        f'Received command {interaction.command.name} with parameters {interaction.data} initiated by user {interaction.user.name}')
 
 
 bot.run(Conf.TOKEN)

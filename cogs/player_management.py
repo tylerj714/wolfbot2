@@ -8,8 +8,9 @@ from dom.conf_vars import ConfVars as Conf
 from dom.data_model import Game, Player, Round, Vote, Party, Dilemma
 from typing import Literal, Optional
 import dom.data_model as gdm
-from bot_logging.logging_manager import log_interaction_call
+from bot_logging.logging_manager import log_interaction_call, log_info
 from utils.command_autocompletes import player_list_autocomplete, party_list_autocomplete
+from cogs.moderator_request_management import send_message_to_moderator as modmsg
 import random
 import string
 
@@ -72,33 +73,33 @@ class PlayerManager(commands.Cog):
             await interaction.response.send_message(f'Set alive status of {this_player.player_discord_name} to {dead}!',
                                                     ephemeral=True)
 
-    @app_commands.command(name="open-private-chat",
-                          description="Opens a private chat with the chosen player")
-    @app_commands.autocomplete(player=player_list_autocomplete)
-    async def open_private_chat(self,
-                                interaction: discord.Interaction,
-                                player: Optional[str] = None):
-        log_interaction_call(interaction)
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-
-        guild = interaction.guild
-        discord_user1 = interaction.user
-        player2 = game.get_player(int(player))
-        discord_user2 = await guild.fetch_member(player2.player_id)
-        channel_identifier = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-        category_channel = await guild.fetch_channel(Conf.PRIVATE_CHAT_CATEGORY)
-
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            discord_user1: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            discord_user2: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-
-        private_channel = await guild.create_text_channel(name=f'private-chat-{channel_identifier}',
-                                                          overwrites=overwrites, category=category_channel)
-        await interaction.response.send_message(f'Created private channel with player {player2.player_discord_name}')
-        await private_channel.send(
-            f'Your private chat between {discord_user1.mention} and {discord_user2.mention} has begun!')
+    # @app_commands.command(name="open-private-chat",
+    #                       description="Opens a private chat with the chosen player")
+    # @app_commands.autocomplete(player=player_list_autocomplete)
+    # async def open_private_chat(self,
+    #                             interaction: discord.Interaction,
+    #                             player: Optional[str] = None):
+    #     log_interaction_call(interaction)
+    #     game = await gdm.get_game(file_path=Conf.GAME_PATH)
+    #
+    #     guild = interaction.guild
+    #     discord_user1 = interaction.user
+    #     player2 = game.get_player(int(player))
+    #     discord_user2 = await guild.fetch_member(player2.player_id)
+    #     channel_identifier = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    #     category_channel = await guild.fetch_channel(Conf.PRIVATE_CHAT_CATEGORY)
+    #
+    #     overwrites = {
+    #         interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+    #         discord_user1: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+    #         discord_user2: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    #     }
+    #
+    #     private_channel = await guild.create_text_channel(name=f'private-chat-{channel_identifier}',
+    #                                                       overwrites=overwrites, category=category_channel)
+    #     await interaction.response.send_message(f'Created private channel with player {player2.player_discord_name}')
+    #     await private_channel.send(
+    #         f'Your private chat between {discord_user1.mention} and {discord_user2.mention} has begun!')
 
     @app_commands.command(name="create-party",
                           description="Creates a player party group")
@@ -223,6 +224,14 @@ class PlayerManager(commands.Cog):
         game_party = game.get_party(int(party))
         game_player = game.get_player(interaction.user.id)
 
+        if not game.is_active:
+            await interaction.response.send_message(
+                f'The bot has been put in an inactive state by the moderator. Please try again later.', ephemeral=True)
+            return
+        elif game.parties_locked:
+            await interaction.response.send_message(f'Parties are currently locked.', ephemeral=True)
+            return
+
         if game_party is None:
             await interaction.response.send_message(f'Could not find a party with that identifier!', ephemeral=True)
             return
@@ -231,8 +240,10 @@ class PlayerManager(commands.Cog):
             await interaction.response.send_message(f'You are not a registered player of the current game!',
                                                     ephemeral=True)
             return
+
         if game_player.is_dead:
             await interaction.response.send_message(f'You are dead! Begone apparition!', ephemeral=True)
+            return
 
         if len(game_party.player_ids) >= game_party.max_size:
             await interaction.response.send_message(f'Party size is already at max size of {game_party.max_size}!',
@@ -260,6 +271,9 @@ class PlayerManager(commands.Cog):
         await interaction.response.send_message(f'You have joined the party {game_party.party_name}!', ephemeral=True)
         await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
 
+        mod_message = f'Player **{game_player.player_discord_name}** joined party **{game_party.party_name}**'
+        await modmsg(mod_message, guild)
+
     @app_commands.command(name="leave-party",
                           description="Allows a player to leave a party and manages text channel permissions")
     @app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
@@ -269,11 +283,20 @@ class PlayerManager(commands.Cog):
 
         game_player = game.get_player(interaction.user.id)
 
+        if not game.is_active:
+            await interaction.response.send_message(
+                f'The bot has been put in an inactive state by the moderator. Please try again later.', ephemeral=True)
+            return
+        elif game.parties_locked:
+            await interaction.response.send_message(f'Parties are currently locked.', ephemeral=True)
+            return
+
         if game_player is None:
             await interaction.response.send_message(f'You are not a registered player of the current game!')
             return
         if game_player.is_dead:
             await interaction.response.send_message(f'You are dead! Begone apparition!')
+            return
 
         game_party = game.get_player_party(game_player)
 
@@ -294,6 +317,10 @@ class PlayerManager(commands.Cog):
         await interaction.response.send_message(f'You have left the party {game_party.party_name}!')
         await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
 
+        mod_message = f'Player **{game_player.player_discord_name}** left party **{game_party.party_name}**'
+        await modmsg(mod_message, guild)
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(PlayerManager(bot), guilds=[discord.Object(id=Conf.GUILD_ID)])
+    cog = PlayerManager(bot)
+    await bot.add_cog(cog, guilds=[discord.Object(id=Conf.GUILD_ID)])
+    log_info(f'Cog {cog.__class__.__name__} loaded!')

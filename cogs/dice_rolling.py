@@ -1,14 +1,12 @@
 #! dice_rolling.py
 # Class with slash commands for rolling dice
 
-import os
 import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
 from typing import Literal, Optional
 from dom.conf_vars import ConfVars as Conf
-from bot_logging.logging_manager import log_interaction_call
+from bot_logging.logging_manager import log_interaction_call, log_info
 import random
 
 
@@ -70,4 +68,6 @@ class DiceManager(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(DiceManager(bot), guilds=[discord.Object(id=Conf.GUILD_ID)])
+    cog = DiceManager(bot)
+    await bot.add_cog(cog, guilds=[discord.Object(id=Conf.GUILD_ID)])
+    log_info(f'Cog {cog.__class__.__name__} loaded!')

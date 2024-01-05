@@ -37,5 +37,13 @@ def create_logger(path):
 def log_interaction_call(interaction: discord.Interaction):
     logger.info(f'Received command {interaction.command.name} with parameters {interaction.data} initiated by user {interaction.user.name}')
 
+def log_info(msg: str):
+    logger.info(msg)
+
+def log_warning(msg: str):
+    logger.warning(msg)
+
+def log_error(msg: str):
+    logger.error(msg)
 
 logger = create_logger(BASE_PATH)
