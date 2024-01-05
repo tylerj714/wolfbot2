@@ -2,11 +2,12 @@
 # a class for managing game state details
 import json
 from typing import Optional, List, Dict, Set
-from archive.logging_manager import logger
+from bot_logging.logging_manager import logger
 import csv
 import time
 import os
 from dom.conf_vars import ConfVars as Conf
+
 
 class Attribute:
     def __init__(self, name: str, level: int, max_level: int):
@@ -22,18 +23,20 @@ class Resource:
 
 
 class Action:
-    def __init__(self, name: str, timing: str, desc: str, uses: int):
+    def __init__(self, name: str, timing: str, cost: str, uses: int, desc: str):
         self.name = name
         self.timing = timing
-        self.desc = desc
+        self.cost = cost
         self.uses = uses
+        self.desc = desc
 
 
 class Item:
-    def __init__(self, item_name: str, item_action: Optional[Action], item_desc: str):
+    def __init__(self, item_name: str, item_properties: str, item_desc: str, item_action: Optional[Action], ):
         self.item_name = item_name
-        self.item_action = item_action
+        self.item_properties = item_properties
         self.item_descr = item_desc
+        self.item_action = item_action
 
 
 class Player:
@@ -73,6 +76,7 @@ class Player:
 
     def remove_item(self, item: Item):
         self.player_items.remove(item)
+
 
 class Vote:
     def __init__(self, player_id: int, choice: str, timestamp: int):
@@ -174,7 +178,8 @@ class Round:
 
 
 class Game:
-    def __init__(self, is_active: bool, parties_locked: bool, voting_locked: bool, items_locked: bool, players: List[Player],
+    def __init__(self, is_active: bool, parties_locked: bool, voting_locked: bool, items_locked: bool,
+                 players: List[Player],
                  parties: List[Party], rounds: List[Round], actions: List[Action], items: List[Item]):
         self.is_active = is_active
         self.parties_locked = parties_locked
@@ -266,17 +271,20 @@ def map_player_list(players: List[Player]) -> Dict[int, Player]:
         player_dict[player.player_id] = player
     return player_dict
 
+
 def map_action_list(actions: List[Action]) -> Dict[str, Action]:
     action_dict: Dict[str, Action] = {}
     for action in actions:
         action_dict[action.name] = action
     return action_dict
 
+
 def map_item_list(items: List[Item]) -> Dict[str, Item]:
     item_dict: Dict[str, Item] = {}
     for item in items:
         item_dict[item.item_name] = item
     return item_dict
+
 
 def read_json_to_dom(filepath: str) -> Game:
     with open(filepath, 'r', encoding="utf8") as openfile:
@@ -310,30 +318,36 @@ def read_json_to_dom(filepath: str) -> Game:
                 if player_entry.get("player_actions") is not None:
                     for action_entry in player_entry.get("player_actions"):
                         action_name = action_entry.get("name")
-                        action_desc = action_entry.get("desc")
+                        action_cost = action_entry.get("cost")
                         action_uses = action_entry.get("uses")
                         action_timing = action_entry.get("timing")
+                        action_desc = action_entry.get("desc")
                         player_actions.append(Action(name=action_name,
-                                                     desc=action_desc,
+                                                     timing=action_timing,
+                                                     cost=action_cost,
                                                      uses=action_uses,
-                                                     timing=action_timing))
+                                                     desc=action_desc))
                 player_items = []
                 if player_entry.get("player_items") is not None:
                     for item_entry in player_entry.get("player_items"):
                         item_name = item_entry.get("item_name")
+                        item_properties = item_entry.get("item_properties")
                         item_desc = item_entry.get("item_desc")
                         item_action: Optional[Action] = None
                         if item_entry.get("item_action") is not None:
                             item_action_entry = item_entry.get("item_action")
                             item_action_name = item_action_entry.get("name")
-                            item_action_desc = item_action_entry.get("desc")
                             item_action_timing = item_action_entry.get("timing")
+                            item_action_cost = item_action_entry.get("cost")
                             item_action_uses = item_action_entry.get("uses")
+                            item_action_desc = item_action_entry.get("desc")
                             item_action = Action(name=item_action_name,
-                                                 desc=item_action_desc,
+                                                 timing=item_action_timing,
+                                                 cost=item_action_cost,
                                                  uses=item_action_uses,
-                                                 timing=item_action_timing)
+                                                 desc=item_action_desc)
                         player_items.append(Item(item_name=item_name,
+                                                 item_properties=item_properties,
                                                  item_desc=item_desc,
                                                  item_action=item_action))
                 players.append(Player(player_id=player_id,
@@ -402,29 +416,35 @@ def read_json_to_dom(filepath: str) -> Game:
         if json_object.get("actions") is not None:
             for action_entry in json_object.get("actions"):
                 action_name = action_entry.get("name")
-                action_desc = action_entry.get("desc")
-                action_uses = action_entry.get("uses")
                 action_timing = action_entry.get("timing")
+                action_cost = action_entry.get("cost")
+                action_uses = action_entry.get("uses")
+                action_desc = action_entry.get("desc")
                 actions.append(Action(name=action_name,
-                                      desc=action_desc,
+                                      timing=action_timing,
+                                      cost=action_cost,
                                       uses=action_uses,
-                                      timing=action_timing))
+                                      desc=action_desc))
         if json_object.get("items") is not None:
             for item_entry in json_object.get("items"):
                 item_name = item_entry.get("item_name")
+                item_properties = item_entry.get("item_properties")
                 item_desc = item_entry.get("item_desc")
                 item_action: Optional[Action] = None
                 if item_entry.get("item_action") is not None:
                     item_action_entry = item_entry.get("item_action")
                     item_action_name = item_action_entry.get("name")
-                    item_action_desc = item_action_entry.get("desc")
                     item_action_timing = item_action_entry.get("timing")
+                    item_action_cost = item_action_entry.get("cost")
                     item_action_uses = item_action_entry.get("uses")
+                    item_action_desc = item_action_entry.get("desc")
                     item_action = Action(name=item_action_name,
-                                         desc=item_action_desc,
+                                         timing=item_action_timing,
+                                         cost=item_action_cost,
                                          uses=item_action_uses,
-                                         timing=item_action_timing)
+                                         desc=item_action_desc)
                 items.append(Item(item_name=item_name,
+                                  item_properties=item_properties,
                                   item_desc=item_desc,
                                   item_action=item_action))
         return Game(is_active=is_active,
@@ -460,19 +480,22 @@ def write_dom_to_json(game: Game):
             player_action_dicts = []
             for action in player.player_actions:
                 player_action_dicts.append({"name": action.name,
-                                            "desc": action.desc,
+                                            "timing": action.timing,
+                                            "cost": action.cost,
                                             "uses": action.uses,
-                                            "timing": action.timing})
+                                            "desc": action.desc})
             player_item_dicts = []
             for item in player.player_items:
                 item_action_dict = {}
                 if item.item_action is not None:
                     item_action: Action = item.item_action
                     item_action_dict = {"name": item_action.name,
-                                        "desc": item_action.desc,
+                                        "timing": item_action.timing,
+                                        "cost": item_action.cost,
                                         "uses": item_action.uses,
-                                        "timing": item_action.timing}
+                                        "desc": item_action.desc}
                 player_item_dicts.append({"item_name": item.item_name,
+                                          "item_properties": item.item_properties,
                                           "item_desc": item.item_descr,
                                           "item_action": item_action_dict})
             player_dicts.append({"player_id": player.player_id,
@@ -522,9 +545,10 @@ def write_dom_to_json(game: Game):
         action_dicts = []
         for action in game.actions:
             action_dicts.append({"name": action.name,
-                                 "desc": action.desc,
+                                 "timing": action.timing,
+                                 "cost": action.cost,
                                  "uses": action.uses,
-                                 "timing": action.timing})
+                                 "desc": action.desc})
         game_dict["actions"] = action_dicts
         item_dicts = []
         for item in game.items:
@@ -532,10 +556,12 @@ def write_dom_to_json(game: Game):
             if item.item_action is not None:
                 item_action: Action = item.item_action
                 item_action_dict = {"name": item_action.name,
-                                    "desc": item_action.desc,
+                                    "timing": item_action.timing,
+                                    "cost": item_action.cost,
                                     "uses": item_action.uses,
-                                    "timing": item_action.timing}
+                                    "desc": item_action.desc}
             item_dicts.append({"item_name": item.item_name,
+                               "item_properties": item.item_properties,
                                "item_desc": item.item_descr,
                                "item_action": item_action_dict})
         game_dict["items"] = item_dicts
@@ -558,7 +584,8 @@ async def write_game(game: Game):
     write_dom_to_json(game=game)
 
 
-async def read_players_file(file_path: str, game_actions: Dict[str, Action] = None, game_items: Dict[str, Item] = None) -> List[Player]:
+async def read_players_file(file_path: str, game_actions: Dict[str, Action] = None,
+                            game_items: Dict[str, Item] = None) -> List[Player]:
     if game_actions is None:
         game_actions = {}
     if game_items is None:
@@ -642,12 +669,14 @@ async def read_actions_file(file_path: str) -> List[Action]:
     for row in rows:
         action_name = row['name']
         action_timing = row['timing'] if 'timing' in row else None
+        action_cost = row['cost'] if 'cost' in row else None
         action_uses = row['uses'] if 'uses' in row else None
         action_desc = row['desc']
         actions.append(Action(name=action_name,
                               timing=action_timing,
-                              desc=action_desc,
-                              uses=action_uses))
+                              cost=action_cost,
+                              uses=action_uses,
+                              desc=action_desc))
 
     return actions
 
@@ -661,6 +690,7 @@ async def read_items_file(file_path: str, game_actions: Dict[str, Action] = None
 
     for row in rows:
         item_name = row['name']
+        item_properties = row['properties'] if 'properties' in row else None
         item_desc = row['desc']
         item_action_name = row['action_name'] if 'action_name' in row else None
 
@@ -669,6 +699,7 @@ async def read_items_file(file_path: str, game_actions: Dict[str, Action] = None
             item_action = game_actions[item_action_name]
 
         items.append(Item(item_name=item_name,
+                          item_properties=item_properties,
                           item_desc=item_desc,
                           item_action=item_action))
 

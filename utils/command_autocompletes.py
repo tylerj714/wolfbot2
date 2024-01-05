@@ -149,10 +149,10 @@ async def player_action_autocomplete(interaction: discord.Interaction,
     game = await gdm.get_game(file_path=Conf.GAME_PATH)
     player_id = interaction.namespace.player if interaction.namespace.player is not None else interaction.user.id
     game_player = game.get_player(player_id)
-    item_choices = await get_player_action_choices(current, game_player)
+    action_choices = await get_player_action_choices(current, game_player)
     return [
         app_commands.Choice(name=choice, value=choice)
-        for choice in item_choices
+        for choice in action_choices
     ]
 
 

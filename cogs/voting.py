@@ -9,7 +9,7 @@ from dom.conf_vars import ConfVars as Conf
 import dom.data_model as gdm
 from typing import Optional, Literal, List
 from dom.data_model import Game, Round, Dilemma, Player, Vote
-from bot_logging.logging_manager import log_interaction_call
+from bot_logging.logging_manager import log_interaction_call, log_info
 from utils.command_autocompletes import player_list_autocomplete, dilemma_choice_autocomplete, dilemma_name_autocomplete
 import time
 
@@ -147,6 +147,9 @@ class VotingManager(commands.Cog):
         if not game.is_active:
             await interaction.response.send_message(
                 f'The bot has been put in an inactive state by the moderator. Please try again later.', ephemeral=True)
+            return
+        elif game.voting_locked:
+            await interaction.response.send_message(f'Voting is currently locked.', ephemeral=True)
             return
 
         if player is not None and other is not None:
@@ -459,6 +462,9 @@ class VotingManager(commands.Cog):
             await interaction.response.send_message(
                 f'The bot has been put in an inactive state by the moderator. Please try again later.', ephemeral=True)
             return
+        elif game.voting_locked:
+            await interaction.response.send_message(f'Voting is currently locked.', ephemeral=True)
+            return
 
         latest_round = game.get_latest_round()
         if latest_round is None or not latest_round.is_active_round:
@@ -561,4 +567,6 @@ class VotingManager(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(VotingManager(bot), guilds=[discord.Object(id=Conf.GUILD_ID)])
+    cog = VotingManager(bot)
+    await bot.add_cog(cog, guilds=[discord.Object(id=Conf.GUILD_ID)])
+    log_info(f'Cog {cog.__class__.__name__} loaded!')

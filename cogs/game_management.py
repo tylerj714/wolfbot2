@@ -9,7 +9,7 @@ from dom.conf_vars import ConfVars as Conf
 from typing import Literal
 import dom.data_model as gdm
 from dom.data_model import Game
-from bot_logging.logging_manager import log_interaction_call
+from bot_logging.logging_manager import log_interaction_call, log_info
 
 
 class GameManager(commands.Cog):
@@ -27,7 +27,7 @@ class GameManager(commands.Cog):
 
         if os.path.exists(Conf.GAME_PATH):
             await interaction.followup.send(f'Game file already exists! Delete the game file or change the '
-                                                 f'config to point to a new location or file!')
+                                            f'config to point to a new location or file!')
             return
 
         generate_channels = True if create_channels == 'True' else False
@@ -79,7 +79,8 @@ class GameManager(commands.Cog):
                                                             read_message_history=True)
                         await party_channel.send(f'**{party_player.player_discord_name}** has joined the party!')
 
-        game = Game(is_active=False, parties_locked=True, voting_locked=True, players=players, parties=parties,
+        game = Game(is_active=False, parties_locked=True, voting_locked=True, items_locked=True, players=players,
+                    parties=parties,
                     rounds=[], actions=actions, items=items)
 
         await gdm.write_game(game=game)
@@ -101,6 +102,8 @@ class GameManager(commands.Cog):
 
         game.actions = actions
 
+        # TODO: Iterate over players and also update their values (but not uses!)
+
         await gdm.write_game(game=game)
 
         await interaction.response.send_message(f'Updated game actions!')
@@ -116,13 +119,15 @@ class GameManager(commands.Cog):
 
         # TODO: Check if game exists, if it doesn't fail out
 
-        items = await gdm.read_actions_file(Conf.ITEM_PATH) if Conf.ITEM_PATH else []
+        items = await gdm.read_items_file(Conf.ITEM_PATH) if Conf.ITEM_PATH else []
 
         game.items = items
 
+        # TODO: Iterate over players and also update their values (but not uses!)
+
         await gdm.write_game(game=game)
 
-        await interaction.response.send_message(f'Updated game actions!')
+        await interaction.response.send_message(f'Updated game items!')
 
     @app_commands.command(name="toggle-game-active-state",
                           description="Enables/Disables bot commands for players")
@@ -150,7 +155,7 @@ class GameManager(commands.Cog):
         game.parties_locked = True if is_locked == 'True' else False
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'Party functionality lock state set to {is_locked}!', ephemeral=True)
+        await interaction.response.send_message(f'Player party movement enabled set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="items-toggle-lock-state",
                           description="Enables/Disables bot commands for item functionality for players only")
@@ -164,7 +169,7 @@ class GameManager(commands.Cog):
         game.items_locked = True if is_locked == 'True' else False
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'Item functionality lock state set to {is_locked}!', ephemeral=True)
+        await interaction.response.send_message(f'Item transfer enabled set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="voting-toggle-lock-state",
                           description="Enables/Disables bot commands for Voting functionality for players only")
@@ -178,7 +183,7 @@ class GameManager(commands.Cog):
         game.voting_locked = True if is_locked == 'True' else False
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'Voting functionality lock state set to {is_locked}!', ephemeral=True)
+        await interaction.response.send_message(f'Voting enabled set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="clear-messages",
                           description="Clears up to 100 messages out of a discord channel")
@@ -203,7 +208,7 @@ class GameManager(commands.Cog):
                               interaction: discord.Interaction,
                               channel: discord.CategoryChannel,
                               channel_again: discord.CategoryChannel,
-                              delete_category: Literal['True','False']):
+                              delete_category: Literal['True', 'False']):
         log_interaction_call(interaction)
         await interaction.response.defer(ephemeral=True, thinking=True)
 
@@ -219,5 +224,8 @@ class GameManager(commands.Cog):
 
         await interaction.followup.send(f'Deleted channels for category {channel.name}!', ephemeral=True)
 
+
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(GameManager(bot), guilds=[discord.Object(id=Conf.GUILD_ID)])
+    cog = GameManager(bot)
+    await bot.add_cog(cog, guilds=[discord.Object(id=Conf.GUILD_ID)])
+    log_info(f'Cog {cog.__class__.__name__} loaded!')
