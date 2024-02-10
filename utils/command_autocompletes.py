@@ -160,18 +160,18 @@ async def get_player_action_choices(substr: str, player: Player) -> List[str]:
     choice_list = []
 
     for action in player.player_actions:
-        if substr and substr.lower() not in action.name.lower():
+        if substr and substr.lower() not in action.action_name.lower():
             continue
-        choice_list.append(action.name)
+        choice_list.append(action.action_name)
 
     # Also include item actions, where they are defined
     for item in player.player_items:
         if item.item_action is not None:
             item_action = item.item_action
-            if item_action.name is not None:
+            if item_action.action_name is not None:
                 if substr and substr.lower() not in item.item_name.lower():
                     continue
-                choice_list.append(item_action.name)
+                choice_list.append(item_action.action_name)
     return choice_list[:25]
 
 
@@ -190,8 +190,8 @@ async def get_game_action_choices(substr: str, game: Game) -> List[str]:
     choice_list = []
 
     for action in game.actions:
-        if substr and substr.lower() not in action.name.lower():
+        if substr and substr.lower() not in action.action_name.lower():
             continue
-        choice_list.append(action.name)
+        choice_list.append(action.action_name)
 
     return choice_list[:25]

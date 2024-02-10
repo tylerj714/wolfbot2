@@ -27,11 +27,16 @@ class GameManager(commands.Cog):
 
         if os.path.exists(Conf.GAME_PATH):
             await interaction.followup.send(f'Game file already exists! Delete the game file or change the '
-                                            f'config to point to a new location or file!')
+                                            f'config to point to a new location or file!', ephemeral=True)
             return
 
         generate_channels = True if create_channels == 'True' else False
 
+        att_defs = await gdm.read_attribute_definitions_file(Conf.ATTRIBUTE_DEF_PATH) if Conf.ATTRIBUTE_DEF_PATH else []
+        res_defs = await gdm.read_resource_definitions_file(Conf.RESOURCE_DEF_PATH) if Conf.RESOURCE_DEF_PATH else []
+        item_type_defs = await gdm.read_item_type_definitions_file(Conf.ITEM_TYPE_DEF_PATH) if Conf.ITEM_TYPE_DEF_PATH else []
+        skills = await gdm.read_skills_file(Conf.SKILL_PATH) if Conf.SKILL_PATH else []
+        status_mods = await gdm.read_status_modifiers_file(Conf.STATUS_MOD_PATH) if Conf.STATUS_MOD_PATH else []
         actions = await gdm.read_actions_file(Conf.ACTION_PATH) if Conf.ACTION_PATH else []
         action_map = gdm.map_action_list(actions)
         items = await gdm.read_items_file(Conf.ITEM_PATH, game_actions=action_map) if Conf.ITEM_PATH else []
@@ -80,8 +85,9 @@ class GameManager(commands.Cog):
                         await party_channel.send(f'**{party_player.player_discord_name}** has joined the party!')
 
         game = Game(is_active=False, parties_locked=True, voting_locked=True, items_locked=True, players=players,
-                    parties=parties,
-                    rounds=[], actions=actions, items=items)
+                    parties=parties, rounds=[], attribute_definitions=att_defs, resource_definitions=res_defs,
+                    item_type_definitions=item_type_defs, skills=skills, status_modifiers=status_mods, actions=actions,
+                    items=items)
 
         await gdm.write_game(game=game)
 
@@ -155,7 +161,7 @@ class GameManager(commands.Cog):
         game.parties_locked = True if is_locked == 'True' else False
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'Player party movement enabled set to {is_locked}!', ephemeral=True)
+        await interaction.response.send_message(f'Player party lock status set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="items-toggle-lock-state",
                           description="Enables/Disables bot commands for item functionality for players only")
@@ -169,7 +175,7 @@ class GameManager(commands.Cog):
         game.items_locked = True if is_locked == 'True' else False
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'Item transfer enabled set to {is_locked}!', ephemeral=True)
+        await interaction.response.send_message(f'Item transfer lock status set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="voting-toggle-lock-state",
                           description="Enables/Disables bot commands for Voting functionality for players only")
@@ -183,7 +189,7 @@ class GameManager(commands.Cog):
         game.voting_locked = True if is_locked == 'True' else False
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'Voting enabled set to {is_locked}!', ephemeral=True)
+        await interaction.response.send_message(f'Voting lock status set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="clear-messages",
                           description="Clears up to 100 messages out of a discord channel")

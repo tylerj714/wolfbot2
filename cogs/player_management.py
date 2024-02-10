@@ -120,7 +120,7 @@ class PlayerManager(commands.Cog):
         party_channel = await guild.create_text_channel(name=f'party-{party_name}', overwrites=overwrites,
                                                         category=category_channel)
 
-        party = Party(player_ids=[], max_size=party_max_size, channel_id=party_channel.id, party_name=party_name)
+        party = Party(player_ids=set(), max_size=party_max_size, channel_id=party_channel.id, party_name=party_name)
         game.add_party(party)
 
         await gdm.write_game(game=game)
