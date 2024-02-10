@@ -105,11 +105,11 @@ class VotingManager(commands.Cog):
                 ephemeral=True)
             return
         else:
-            message_id = create_and_pin_report_message(channel=report_channel,
+            message_id = await create_and_pin_report_message(channel=report_channel,
                                                        report_name=f'{latest_round.round_number + 1}',
                                                        report_type="Round")
             new_round = Round(votes=[], round_channel_id=report_channel.id, round_message_id=message_id,
-                              round_number=latest_round.round_number + 1, is_active_round=True)
+                              round_dilemmas=[], round_number=latest_round.round_number + 1, is_active_round=True)
             game.add_round(new_round)
 
         await gdm.write_game(game=game)

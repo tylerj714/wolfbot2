@@ -1,5 +1,6 @@
 # wolfbot2.py
 import discord
+import faulthandler
 from discord.ext import commands
 from discord import app_commands
 from bot_logging.logging_manager import logger, log_info
@@ -10,6 +11,7 @@ class WolfBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='!', intents=discord.Intents.all(), help_command=None)
         self.synced = False
+        faulthandler.enable()
 
     async def setup_hook(self):
         # await self.load_extension(f"cogs.test")
