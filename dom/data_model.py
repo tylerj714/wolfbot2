@@ -10,6 +10,14 @@ import os
 from dom.conf_vars import ConfVars as Conf
 
 
+class PersistentInteractableView:
+    def __init__(self, view_name: str, channel_id: int, message_ids: list[int], button_msg_id: int):
+        self.view_name = view_name
+        self.channel_id = channel_id
+        self.message_ids = message_ids
+        self.button_msg_id = button_msg_id
+
+
 class AttributeModifier:
     def __init__(self, att_name: str, modification: int):
         self.att_name = att_name
@@ -127,6 +135,14 @@ class Player:
 
     def remove_item(self, item: Item):
         self.player_items.remove(item)
+
+    def get_item_actions(self) -> list[(str, Action)]:
+        item_actions: list[(str, Action)] = []
+        for item in self.player_items:
+            if item.item_action is not None:
+                item_tuple = (item.item_name, item.item_action)
+                item_actions.append(item_tuple)
+        return item_actions
 
 
 class Vote:
@@ -256,7 +272,8 @@ class Game:
                  players: List[Player], parties: List[Party], rounds: List[Round],
                  attribute_definitions: List[AttributeDefinition], resource_definitions: List[ResourceDefinition],
                  item_type_definitions: List[ItemTypeDefinition], skills: List[Skill],
-                 status_modifiers: List[StatusModifier], actions: List[Action], items: List[Item]):
+                 status_modifiers: List[StatusModifier], actions: List[Action], items: List[Item],
+                 pi_views: List[PersistentInteractableView]):
         self.is_active = is_active
         self.parties_locked = parties_locked
         self.voting_locked = voting_locked
@@ -271,6 +288,7 @@ class Game:
         self.status_modifiers = status_modifiers
         self.actions = actions
         self.items = items
+        self.pi_views = pi_views
 
     def get_player(self, player_id: int | str) -> Optional[Player]:
         player_int_id = player_id if isinstance(player_id, int) else int(player_id)
@@ -345,6 +363,26 @@ class Game:
             item_dict[item.item_name] = item
         return item_dict
 
+    def get_item_actions(self) -> list[(str, Action)]:
+        item_actions: list[(str, Action)] = []
+        for item in self.items:
+            if item.item_action is not None:
+                item_tuple = (item.item_name, item.item_action)
+                item_actions.append(item_tuple)
+        return item_actions
+
+    def get_resource_definitions(self) -> Dict[str, ResourceDefinition]:
+        res_def_dict: Dict[str, ResourceDefinition] = {}
+        for res_def in self.resource_definitions:
+            res_def_dict[res_def.resource_name] = res_def
+        return res_def_dict
+
+    def get_pi_view(self, view_name: str) -> Optional[PersistentInteractableView]:
+        for pi_view in self.pi_views:
+            if pi_view.view_name == view_name:
+                return pi_view
+        return None
+
 
 def map_player_list(players: List[Player]) -> Dict[int, Player]:
     player_dict: Dict[int, Player] = {}
@@ -384,7 +422,8 @@ def read_json_to_dom(filepath: str) -> Game:
                 for attribute_def_entry in json_object.get("attribute_defs"):
                     attribute_name = attribute_def_entry.get("attribute_name")
                     attribute_max = int_w_default(
-                        attribute_def_entry.get("attribute_max"), -1) if dict_val_ne(attribute_def_entry, 'attribute_max') else -1
+                        attribute_def_entry.get("attribute_max"), -1) if dict_val_ne(attribute_def_entry,
+                                                                                     'attribute_max') else -1
                     att_emoji_text = attribute_def_entry.get("emoji_text")
                     attribute_defs.append(AttributeDefinition(attribute_name=attribute_name,
                                                               attribute_max=attribute_max,
@@ -394,7 +433,8 @@ def read_json_to_dom(filepath: str) -> Game:
                 for resource_def_entry in json_object.get("resource_defs"):
                     resource_name = resource_def_entry.get("resource_name")
                     resource_max = int_w_default(
-                        resource_def_entry.get("resource_max"), -1) if dict_val_ne(resource_def_entry, 'resource_max') else -1
+                        resource_def_entry.get("resource_max"), -1) if dict_val_ne(resource_def_entry,
+                                                                                   'resource_max') else -1
                     is_commodity = resource_def_entry.get("is_commodity")
                     res_emoji_text = resource_def_entry.get("emoji_text")
                     resource_defs.append(ResourceDefinition(resource_name=resource_name,
@@ -407,7 +447,8 @@ def read_json_to_dom(filepath: str) -> Game:
                     item_type = item_type_def_entry.get("item_type")
                     is_equippable = item_type_def_entry.get("is_equippable")
                     max_equippable = int_w_default(
-                        item_type_def_entry.get("max_equippable"), -1) if dict_val_ne(item_type_def_entry, 'max_equippable') else -1
+                        item_type_def_entry.get("max_equippable"), -1) if dict_val_ne(item_type_def_entry,
+                                                                                      'max_equippable') else -1
                     item_emoji_text = item_type_def_entry.get("emoji_text")
                     item_type_defs.append(ItemTypeDefinition(item_type=item_type,
                                                              is_equippable=is_equippable,
@@ -425,8 +466,9 @@ def read_json_to_dom(filepath: str) -> Game:
                         for game_skill_mod_att_entry in game_skill_entry.get("modifies_attributes"):
                             game_skill_mod_att_name = game_skill_mod_att_entry.get("att_name")
                             game_skill_mod_mod_amt = int_w_default(game_skill_mod_att_entry.get("modification"), 0)
-                            game_skill_mod_modifies_attributes.append(AttributeModifier(att_name=game_skill_mod_att_name,
-                                                                                        modification=game_skill_mod_mod_amt))
+                            game_skill_mod_modifies_attributes.append(
+                                AttributeModifier(att_name=game_skill_mod_att_name,
+                                                  modification=game_skill_mod_mod_amt))
                     skills.append(Skill(skill_name=game_skill_name,
                                         skill_req=game_skill_req,
                                         skill_restrict=game_skill_restrict,
@@ -453,6 +495,17 @@ def read_json_to_dom(filepath: str) -> Game:
                                                            modifier_duration=game_modifier_duration,
                                                            modifier_stacks=game_modifier_stacks,
                                                            modifies_attributes=game_stat_mod_modifies_attributes))
+            pi_views = []
+            if dict_val_ne(json_object, 'pi_views'):
+                for piv_entry in json_object.get("pi_views"):
+                    view_name = piv_entry.get("view_name")
+                    channel_id = piv_entry.get("channel_id")
+                    message_ids = list(piv_entry.get("message_ids"))
+                    button_msg_id = piv_entry.get("button_msg_id")
+                    pi_views.append(PersistentInteractableView(view_name=view_name,
+                                                               channel_id=channel_id,
+                                                               message_ids=message_ids,
+                                                               button_msg_id=button_msg_id))
             actions = []
             items = []
             if dict_val_ne(json_object, 'players'):
@@ -492,8 +545,9 @@ def read_json_to_dom(filepath: str) -> Game:
                             if dict_val_ne(skill_entry, 'modifies_attributes'):
                                 for player_skill_mod_att_entry in skill_entry.get("modifies_attributes"):
                                     player_skill_mod_att_name = player_skill_mod_att_entry.get("att_name")
-                                    player_skill_mod_mod_amt = int_w_default(player_skill_mod_att_entry.get("modification"),
-                                                                             0)
+                                    player_skill_mod_mod_amt = int_w_default(
+                                        player_skill_mod_att_entry.get("modification"),
+                                        0)
                                     player_skill_modifies_attributes.append(
                                         AttributeModifier(att_name=player_skill_mod_att_name,
                                                           modification=player_skill_mod_mod_amt))
@@ -514,7 +568,8 @@ def read_json_to_dom(filepath: str) -> Game:
                             if dict_val_ne(player_status_mod_entry, 'modifies_attributes'):
                                 for player_stat_mod_att_entry in player_status_mod_entry.get("modifies_attributes"):
                                     player_stat_mod_att_name = player_stat_mod_att_entry.get("att_name")
-                                    player_stat_mod_mod_amt = int_w_default(player_stat_mod_att_entry.get("modification"), 0)
+                                    player_stat_mod_mod_amt = int_w_default(
+                                        player_stat_mod_att_entry.get("modification"), 0)
                                     player_stat_mod_modifies_attributes.append(
                                         AttributeModifier(att_name=player_stat_mod_att_name,
                                                           modification=player_stat_mod_mod_amt))
@@ -567,9 +622,11 @@ def read_json_to_dom(filepath: str) -> Game:
                                 if dict_val_ne(player_item_action, 'action_costs'):
                                     for player_item_action_cost_entry in player_item_action.get("action_costs"):
                                         player_item_action_cost_name = player_item_action_cost_entry.get("res_name")
-                                        player_item_action_cost_amt = int_w_default(player_item_action_cost_entry.get("amount"), 0)
-                                        player_item_action_costs.append(ResourceCost(res_name=player_item_action_cost_name,
-                                                                                     amount=player_item_action_cost_amt))
+                                        player_item_action_cost_amt = int_w_default(
+                                            player_item_action_cost_entry.get("amount"), 0)
+                                        player_item_action_costs.append(
+                                            ResourceCost(res_name=player_item_action_cost_name,
+                                                         amount=player_item_action_cost_amt))
                                 item_action_uses = int_w_default(player_item_action.get("action_uses"), -1)
                                 item_action_timing = player_item_action.get("action_timing")
                                 item_action_classes = player_item_action.get("action_classes")
@@ -701,8 +758,9 @@ def read_json_to_dom(filepath: str) -> Game:
                             for game_item_action_cost_entry in game_item_action_entry.get("action_costs"):
                                 game_item_action_cost_name = game_item_action_cost_entry.get("res_name")
                                 game_item_action_cost_amt = int_w_default(game_item_action_cost_entry.get("amount"), 0)
-                                game_item_action_costs_resources.append(ResourceCost(res_name=game_item_action_cost_name,
-                                                                                     amount=game_item_action_cost_amt))
+                                game_item_action_costs_resources.append(
+                                    ResourceCost(res_name=game_item_action_cost_name,
+                                                 amount=game_item_action_cost_amt))
                         game_item_action_uses = int_w_default(game_item_action_entry.get("action_uses"), -1)
                         game_item_action_classes = game_item_action_entry.get("action_classes")
                         game_item_action_level_req = int_w_default(game_item_action_entry.get("action_level_req"), 0)
@@ -737,7 +795,8 @@ def read_json_to_dom(filepath: str) -> Game:
                         skills=skills,
                         status_modifiers=status_modifiers,
                         actions=actions,
-                        items=items)
+                        items=items,
+                        pi_views=pi_views)
     except Exception as e:
         logger.error(f'Error while reading dom file!\n{e}')
 
@@ -801,6 +860,13 @@ def write_dom_to_json(game: Game):
                                         "modifier_stacks": game_stat_mod.modifier_stacks,
                                         "modifies_attributes": game_stat_mod_modifies_atts_dicts})
         game_dict["status_mods"] = game_stat_mod_dicts
+        game_pi_view_dicts = []
+        for pi_view in game.pi_views:
+            game_pi_view_dicts.append({"view_name": pi_view.view_name,
+                                       "channel_id": pi_view.channel_id,
+                                       "message_ids": pi_view.message_ids,
+                                       "button_msg_id": pi_view.button_msg_id})
+        game_dict["pi_views"] = game_pi_view_dicts
         player_dicts = []
         for player in game.players:
             player_attribute_dicts = []
@@ -1099,7 +1165,8 @@ async def read_parties_file(file_path: str) -> List[Party]:
     rows: List[Dict] = await read_csv_file(file_path=file_path)
 
     for row in rows:
-        player_ids = set(map(int, list(filter(None, row['player_ids'].split(';'))))) if dict_val_ne(row, 'player_ids') else []
+        player_ids = set(map(int, list(filter(None, row['player_ids'].split(';'))))) if dict_val_ne(row,
+                                                                                                    'player_ids') else []
         party_name = row['name']
         max_size = int_w_default(row['max_size'], -1) if dict_val_ne(row, 'max_size') else -1
         channel_id = int_w_default(row['channel_id'], 0) if dict_val_ne(row, 'channel_id') else 0
@@ -1172,7 +1239,8 @@ async def read_skills_file(file_path: str) -> List[Skill]:
         skill_req = row['skill_req'] if dict_val_ne(row, 'skill_req') else None
         skill_restrict = row['skill_restrict'] if dict_val_ne(row, 'skill_restrict') else None
         skill_desc = row['skill_desc']
-        modifies_attributes_raw = list(filter(None, row['modifies_attributes'].split(';'))) if dict_val_ne(row, 'modifies_attributes') else []
+        modifies_attributes_raw = list(filter(None, row['modifies_attributes'].split(';'))) if dict_val_ne(row,
+                                                                                                           'modifies_attributes') else []
 
         modifies_attributes = []
         for entry in modifies_attributes_raw:
@@ -1225,7 +1293,8 @@ async def read_actions_file(file_path: str) -> List[Action]:
     for row in rows:
         action_name = row['action_name']
         action_timing = row['action_timing'] if dict_val_ne(row, 'action_timing') else None
-        action_costs_raw = list(filter(None, row['action_costs'].split(';'))) if dict_val_ne(row, 'action_costs') else []
+        action_costs_raw = list(filter(None, row['action_costs'].split(';'))) if dict_val_ne(row,
+                                                                                             'action_costs') else []
 
         action_costs = []
         for entry in action_costs_raw:
@@ -1233,7 +1302,8 @@ async def read_actions_file(file_path: str) -> List[Action]:
             action_costs.append(ResourceCost(res_name=entry_splits[0], amount=int(entry_splits[1])))
 
         action_uses = int_w_default(row['action_uses'], -1)
-        action_classes = list(filter(None, row['action_classes'].split(';'))) if dict_val_ne(row, 'action_classes') else []
+        action_classes = list(filter(None, row['action_classes'].split(';'))) if dict_val_ne(row,
+                                                                                             'action_classes') else []
         action_level_req = int_w_default(row['action_level_req'], 0) if dict_val_ne(row, 'action_level_req') else 0
         action_priority = int_w_default(row['action_priority'], -1) if dict_val_ne(row, 'action_priority') else -1
         action_desc = row['action_desc']
@@ -1291,6 +1361,7 @@ async def read_csv_file(file_path: str) -> List[Dict]:
             rows.append(row)
 
     return rows
+
 
 def dict_val_ne(the_dict: dict, the_key: str) -> bool:
     if the_key in the_dict:

@@ -5,6 +5,7 @@ from discord.ext import commands
 from discord import app_commands
 from bot_logging.logging_manager import logger, log_info
 from dom.conf_vars import ConfVars as Conf
+from cogs.action_item_management import ActionViewButtons
 
 
 class WolfBot(commands.Bot):
@@ -18,7 +19,7 @@ class WolfBot(commands.Bot):
         await self.load_extension(f"cogs.game_management")
         await self.load_extension(f"cogs.player_management")
         await self.load_extension(f"cogs.voting")
-        await self.load_extension(f"cogs.dice_rolling")
+        # await self.load_extension(f"cogs.dice_rolling")
         await self.load_extension(f"cogs.action_item_management")
         await self.load_extension(f"cogs.moderator_request_management")
         await self.load_extension(f"cogs.emoji_manager")
@@ -30,6 +31,7 @@ class WolfBot(commands.Bot):
 
     async def on_ready(self):
         await self.wait_until_ready()
+        self.add_view(ActionViewButtons())
         print(f"We have logged in as {self.user}.")
 
 
