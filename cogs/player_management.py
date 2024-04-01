@@ -148,7 +148,7 @@ class PlayerManager(commands.Cog):
             await interaction.response.send_message(f'Could not find a player with that identifier!', ephemeral=True)
             return
 
-        if len(game_party.player_ids) >= game_party.max_size:
+        if game_party.max_size != -1 and len(game_party.player_ids) >= game_party.max_size:
             await interaction.response.send_message(f'Party size is already at max size of {game_party.max_size}!',
                                                     ephemeral=True)
             return
@@ -163,7 +163,7 @@ class PlayerManager(commands.Cog):
             existing_party_channel = await guild.fetch_channel(existing_party.channel_id)
             await existing_party_channel.set_permissions(player_user, read_messages=False, send_messages=False,
                                                          read_message_history=False)
-            await existing_party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+            await existing_party_channel.send(f'**{game_player.player_discord_name}** has left {existing_party.party_name}!')
             existing_party.remove_player(game_player)
 
         game_party.add_player(game_player)
@@ -174,7 +174,7 @@ class PlayerManager(commands.Cog):
         await gdm.write_game(game=game)
         await interaction.response.send_message(
             f'Added player {game_player.player_discord_name} to party {game_party.party_name}!', ephemeral=True)
-        await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
+        await party_channel.send(f'**{game_player.player_discord_name}** has joined {existing_party.party_name}!')
 
     @app_commands.command(name="remove-party-player",
                           description="Removes a player from a party and manages text channel permissions")
@@ -210,7 +210,7 @@ class PlayerManager(commands.Cog):
         await gdm.write_game(game=game)
         await interaction.response.send_message(
             f'Removed player {game_player.player_discord_name} from party {game_party.party_name}!', ephemeral=True)
-        await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+        await party_channel.send(f'**{game_player.player_discord_name}** has left {game_party.party_name}!')
 
     @app_commands.command(name="join-party",
                           description="Allows a player to join a party and manages text channel permissions")
@@ -245,7 +245,7 @@ class PlayerManager(commands.Cog):
             await interaction.response.send_message(f'You are dead! Begone apparition!', ephemeral=True)
             return
 
-        if len(game_party.player_ids) >= game_party.max_size:
+        if game_party.max_size != -1 and len(game_party.player_ids) >= game_party.max_size:
             await interaction.response.send_message(f'Party size is already at max size of {game_party.max_size}!',
                                                     ephemeral=True)
             return
@@ -259,7 +259,7 @@ class PlayerManager(commands.Cog):
             existing_party_channel = await guild.fetch_channel(existing_party.channel_id)
             await existing_party_channel.set_permissions(player_user, read_messages=False, send_messages=False,
                                                          read_message_history=False)
-            await existing_party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+            await existing_party_channel.send(f'**{game_player.player_discord_name}** has left {existing_party.party_name}!')
             existing_party.remove_player(game_player)
 
         game_party.add_player(game_player)
@@ -268,10 +268,10 @@ class PlayerManager(commands.Cog):
                                             read_message_history=True)
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'You have joined the party {game_party.party_name}!', ephemeral=True)
-        await party_channel.send(f'**{game_player.player_discord_name}** has joined the party!')
+        await interaction.response.send_message(f'You have joined {game_party.party_name}!', ephemeral=True)
+        await party_channel.send(f'**{game_player.player_discord_name}** has joined {game_party.party_name}!')
 
-        mod_message = f'Player **{game_player.player_discord_name}** joined party **{game_party.party_name}**'
+        mod_message = f'Player **{game_player.player_discord_name}** joined **{game_party.party_name}**'
         await modmsg(mod_message, guild)
 
     @app_commands.command(name="leave-party",
@@ -314,10 +314,10 @@ class PlayerManager(commands.Cog):
                                             read_message_history=False)
 
         await gdm.write_game(game=game)
-        await interaction.response.send_message(f'You have left the party {game_party.party_name}!')
-        await party_channel.send(f'**{game_player.player_discord_name}** has left the party!')
+        await interaction.response.send_message(f'You have left {game_party.party_name}!')
+        await party_channel.send(f'**{game_player.player_discord_name}** has left {game_party.party_name}!')
 
-        mod_message = f'Player **{game_player.player_discord_name}** left party **{game_party.party_name}**'
+        mod_message = f'Player **{game_player.player_discord_name}** left **{game_party.party_name}**'
         await modmsg(mod_message, guild)
 
 async def setup(bot: commands.Bot) -> None:

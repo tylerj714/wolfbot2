@@ -6,7 +6,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from dom.conf_vars import ConfVars as Conf
-from typing import Literal
+from typing import Optional, Literal
 import dom.data_model as gdm
 from dom.data_model import Game
 from bot_logging.logging_manager import log_interaction_call, log_info
@@ -21,7 +21,8 @@ class GameManager(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     async def initialize_game(self,
                               interaction: discord.Interaction,
-                              create_channels: Literal['True', 'False']):
+                              create_channels: Literal['True', 'False'],
+                              party_prefix: Optional[str]):
         log_interaction_call(interaction)
         await interaction.response.defer(ephemeral=True, thinking=True)
 
@@ -29,6 +30,8 @@ class GameManager(commands.Cog):
             await interaction.followup.send(f'Game file already exists! Delete the game file or change the '
                                             f'config to point to a new location or file!', ephemeral=True)
             return
+
+        party_prefix = "" if not party_prefix else party_prefix
 
         generate_channels = True if create_channels == 'True' else False
 
@@ -71,23 +74,25 @@ class GameManager(commands.Cog):
                         interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False)
                     }
 
-                    party_channel_name = f'party-{party.party_name}'
+                    party_channel_name = f'{party_prefix}{party.party_name}'
                     party_channel = await interaction.guild.create_text_channel(name=party_channel_name,
                                                                                 overwrites=overwrites,
                                                                                 category=private_chat_channel)
                     party.channel_id = party_channel.id
+                else:
+                    party_channel = await interaction.guild.fetch_channel(party.channel_id)
 
-                    for player_id in party.player_ids:
-                        party_player = player_map[player_id]
-                        party_member = await interaction.guild.fetch_member(player_id)
-                        await party_channel.set_permissions(party_member, read_messages=True, send_messages=True,
-                                                            read_message_history=True)
-                        await party_channel.send(f'**{party_player.player_discord_name}** has joined the party!')
+                for player_id in party.player_ids:
+                    party_player = player_map[player_id]
+                    party_member = await interaction.guild.fetch_member(player_id)
+                    await party_channel.set_permissions(party_member, read_messages=True, send_messages=True,
+                                                        read_message_history=True)
+                    await party_channel.send(f'**{party_player.player_discord_name}** has joined {party.party_name}!')
 
         game = Game(is_active=False, parties_locked=True, voting_locked=True, items_locked=True, players=players,
                     parties=parties, rounds=[], attribute_definitions=att_defs, resource_definitions=res_defs,
                     item_type_definitions=item_type_defs, skills=skills, status_modifiers=status_mods, actions=actions,
-                    items=items)
+                    items=items, pi_views=[])
 
         await gdm.write_game(game=game)
 
