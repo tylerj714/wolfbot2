@@ -5,8 +5,8 @@ from discord.ext import commands
 from discord import app_commands
 from bot_logging.logging_manager import logger, log_info
 from dom.conf_vars import ConfVars as Conf
-from cogs.action_item_management import ActionViewButtons
-
+from cogs.action_views import ActionViewButtons
+from cogs.item_views import ItemViewButtons
 
 class WolfBot(commands.Bot):
     def __init__(self):
@@ -20,7 +20,12 @@ class WolfBot(commands.Bot):
         await self.load_extension(f"cogs.player_management")
         await self.load_extension(f"cogs.voting")
         # await self.load_extension(f"cogs.dice_rolling")
+        await self.load_extension(f"cogs.resource_management")
         await self.load_extension(f"cogs.action_item_management")
+        await self.load_extension(f"cogs.action_views")
+        await self.load_extension(f"cogs.item_views")
+        # await self.load_extension(f"cogs.stat_mod_views")
+        await self.load_extension(f"cogs.persistent_view_management")
         await self.load_extension(f"cogs.moderator_request_management")
         await self.load_extension(f"cogs.emoji_manager")
         guild = discord.Object(id=Conf.GUILD_ID)
@@ -32,6 +37,7 @@ class WolfBot(commands.Bot):
     async def on_ready(self):
         await self.wait_until_ready()
         self.add_view(ActionViewButtons())
+        self.add_view(ItemViewButtons())
         print(f"We have logged in as {self.user}.")
 
 

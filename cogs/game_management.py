@@ -8,7 +8,8 @@ from discord.ext import commands
 from dom.conf_vars import ConfVars as Conf
 from typing import Optional, Literal
 import dom.data_model as gdm
-from dom.data_model import Game
+from dom.data_model import Game, Action, Item, Player, Party, Round, Dilemma, Resource, ResourceCost, Attribute, \
+    AttributeModifier, ResourceDefinition, AttributeDefinition, ItemTypeDefinition, Skill, StatusModifier
 from bot_logging.logging_manager import log_interaction_call, log_info
 
 
@@ -35,19 +36,31 @@ class GameManager(commands.Cog):
 
         generate_channels = True if create_channels == 'True' else False
 
-        att_defs = await gdm.read_attribute_definitions_file(Conf.ATTRIBUTE_DEF_PATH) if Conf.ATTRIBUTE_DEF_PATH else []
-        res_defs = await gdm.read_resource_definitions_file(Conf.RESOURCE_DEF_PATH) if Conf.RESOURCE_DEF_PATH else []
-        item_type_defs = await gdm.read_item_type_definitions_file(Conf.ITEM_TYPE_DEF_PATH) if Conf.ITEM_TYPE_DEF_PATH else []
-        skills = await gdm.read_skills_file(Conf.SKILL_PATH) if Conf.SKILL_PATH else []
-        status_mods = await gdm.read_status_modifiers_file(Conf.STATUS_MOD_PATH) if Conf.STATUS_MOD_PATH else []
-        actions = await gdm.read_actions_file(Conf.ACTION_PATH) if Conf.ACTION_PATH else []
-        action_map = gdm.map_action_list(actions)
-        items = await gdm.read_items_file(Conf.ITEM_PATH, game_actions=action_map) if Conf.ITEM_PATH else []
-        item_map = gdm.map_item_list(items)
-        players = await gdm.read_players_file(Conf.PLAYER_PATH, game_actions=action_map,
-                                              game_items=item_map) if Conf.PLAYER_PATH else []
-        player_map = gdm.map_player_list(players)
-        parties = await gdm.read_parties_file(Conf.PARTY_PATH) if Conf.PARTY_PATH else []
+        att_defs: list[AttributeDefinition] = await gdm.read_attribute_definitions_file(
+            Conf.ATTRIBUTE_DEF_PATH) if Conf.ATTRIBUTE_DEF_PATH else []
+        att_def_map: dict[str, AttributeDefinition] = gdm.map_attribute_definition_list(att_defs)
+        res_defs: list[ResourceDefinition] = await gdm.read_resource_definitions_file(
+            Conf.RESOURCE_DEF_PATH) if Conf.RESOURCE_DEF_PATH else []
+        res_def_map: dict[str, ResourceDefinition] = gdm.map_resource_definition_list(res_defs)
+        item_type_defs: list[ItemTypeDefinition] = await gdm.read_item_type_definitions_file(
+            Conf.ITEM_TYPE_DEF_PATH) if Conf.ITEM_TYPE_DEF_PATH else []
+        skills: list[Skill] = await gdm.read_skills_file(Conf.SKILL_PATH) if Conf.SKILL_PATH else []
+        skill_map: dict[str, Skill] = gdm.map_skill_list(skills)
+        status_mods: list[StatusModifier] = await gdm.read_status_modifiers_file(
+            Conf.STATUS_MOD_PATH) if Conf.STATUS_MOD_PATH else []
+        stat_mod_map: dict[str, StatusModifier] = gdm.map_status_modifier_list(status_mods)
+        actions: list[Action] = await gdm.read_actions_file(Conf.ACTION_PATH) if Conf.ACTION_PATH else []
+        action_map: dict[str, Action] = gdm.map_action_list(actions)
+        items: list[Item] = await gdm.read_items_file(Conf.ITEM_PATH, game_actions=action_map) if Conf.ITEM_PATH else []
+        item_map: dict[str, Item] = gdm.map_item_list(items)
+        players: list[Player] = await gdm.read_players_file(Conf.PLAYER_PATH, game_actions=action_map,
+                                                            game_items=item_map, game_resource_definitions=res_def_map,
+                                                            game_attribute_definitions=att_def_map,
+                                                            game_status_modifiers=stat_mod_map,
+                                                            game_skills=skill_map
+                                                            ) if Conf.PLAYER_PATH else []
+        player_map: dict[int, Player] = gdm.map_player_list(players)
+        parties: list[Party] = await gdm.read_parties_file(Conf.PARTY_PATH) if Conf.PARTY_PATH else []
 
         # If generate channels is enabled, generate channels for players and parties, if they are defined
         if generate_channels:
@@ -89,10 +102,10 @@ class GameManager(commands.Cog):
                                                         read_message_history=True)
                     await party_channel.send(f'**{party_player.player_discord_name}** has joined {party.party_name}!')
 
-        game = Game(is_active=False, parties_locked=True, voting_locked=True, items_locked=True, players=players,
-                    parties=parties, rounds=[], attribute_definitions=att_defs, resource_definitions=res_defs,
-                    item_type_definitions=item_type_defs, skills=skills, status_modifiers=status_mods, actions=actions,
-                    items=items, pi_views=[])
+        game = Game(is_active=False, parties_locked=True, voting_locked=True, items_locked=True, resources_locked=True,
+                    players=players, parties=parties, rounds=[], attribute_definitions=att_defs,
+                    resource_definitions=res_defs, item_type_definitions=item_type_defs, skills=skills,
+                    status_modifiers=status_mods, actions=actions, items=items, pi_views=[])
 
         await gdm.write_game(game=game)
 
@@ -195,6 +208,20 @@ class GameManager(commands.Cog):
 
         await gdm.write_game(game=game)
         await interaction.response.send_message(f'Voting lock status set to {is_locked}!', ephemeral=True)
+
+    @app_commands.command(name="resources-toggle-lock-state",
+                          description="Enables/Disables bot commands for Resources functionality for players only")
+    @app_commands.default_permissions(manage_guild=True)
+    async def resources_toggle_lock_state(self,
+                                          interaction: discord.Interaction,
+                                          is_locked: Literal['True', 'False']):
+        log_interaction_call(interaction)
+        game = await gdm.get_game(file_path=Conf.GAME_PATH)
+
+        game.resources_locked = True if is_locked == 'True' else False
+
+        await gdm.write_game(game=game)
+        await interaction.response.send_message(f'Resources lock status set to {is_locked}!', ephemeral=True)
 
     @app_commands.command(name="clear-messages",
                           description="Clears up to 100 messages out of a discord channel")
