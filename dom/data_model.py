@@ -38,11 +38,14 @@ class ResourceCost:
 
 
 class Resource:
-    def __init__(self, resource_type: str, resource_amt: int, resource_max: int, is_commodity: bool):
+    def __init__(self, resource_type: str, resource_amt: int, resource_income: int, resource_max: int,
+                 is_commodity: bool, is_perishable):
         self.resource_type = resource_type
         self.resource_amt = resource_amt
+        self.resource_income = resource_income
         self.resource_max = resource_max
         self.is_commodity = is_commodity
+        self.is_perishable = is_perishable
 
 
 class Skill:
@@ -143,6 +146,24 @@ class Player:
                 item_tuple = (item.item_name, item.item_action)
                 item_actions.append(item_tuple)
         return item_actions
+
+    def get_resource(self, resource_name: str) -> Optional[Resource]:
+        for resource in self.player_resources:
+            if resource.resource_type == resource_name:
+                return resource
+        return None
+
+    def modify_resource(self, resource_name: str, amt: int):
+        resource_to_modify = self.get_resource(resource_name=resource_name)
+        if resource_to_modify:
+            if resource_to_modify.resource_max != -1 and resource_to_modify.resource_amt + amt >= resource_to_modify.resource_max:
+                resource_to_modify.resource_amt = resource_to_modify.resource_max
+            elif resource_to_modify.resource_amt + amt <= 0:
+                resource_to_modify.resource_amt = 0
+            else:
+                resource_to_modify.resource_amt = resource_to_modify.resource_amt + amt
+        else:
+            logger.warn(f"Attempted to add resource {resource_name} to player, but player does not have this resource!")
 
 
 class Vote:
@@ -252,10 +273,11 @@ class AttributeDefinition:
 
 
 class ResourceDefinition:
-    def __init__(self, resource_name: str, resource_max: int, is_commodity: bool, emoji_text: str):
+    def __init__(self, resource_name: str, resource_max: int, is_commodity: bool, is_perishable: bool, emoji_text: str):
         self.resource_name = resource_name
         self.resource_max = resource_max
         self.is_commodity = is_commodity
+        self.is_perishable = is_perishable
         self.emoji_text = emoji_text
 
 
@@ -269,7 +291,7 @@ class ItemTypeDefinition:
 
 class Game:
     def __init__(self, is_active: bool, parties_locked: bool, voting_locked: bool, items_locked: bool,
-                 players: List[Player], parties: List[Party], rounds: List[Round],
+                 resources_locked: bool, players: List[Player], parties: List[Party], rounds: List[Round],
                  attribute_definitions: List[AttributeDefinition], resource_definitions: List[ResourceDefinition],
                  item_type_definitions: List[ItemTypeDefinition], skills: List[Skill],
                  status_modifiers: List[StatusModifier], actions: List[Action], items: List[Item],
@@ -278,6 +300,7 @@ class Game:
         self.parties_locked = parties_locked
         self.voting_locked = voting_locked
         self.items_locked = items_locked
+        self.resources_locked = resources_locked
         self.players = players
         self.rounds = rounds
         self.parties = parties
@@ -377,11 +400,22 @@ class Game:
             res_def_dict[res_def.resource_name] = res_def
         return res_def_dict
 
+    def get_resource_definition_by_name(self, resource_name: str) -> Optional[ResourceDefinition]:
+        for res_def in self.resource_definitions:
+            if res_def.resource_name == resource_name:
+                return res_def
+        return None
+
     def get_pi_view(self, view_name: str) -> Optional[PersistentInteractableView]:
         for pi_view in self.pi_views:
             if pi_view.view_name == view_name:
                 return pi_view
         return None
+
+    def remove_pi_view(self, view_name: str):
+        for pi_view in self.pi_views:
+            if pi_view.view_name == view_name:
+                self.pi_views.remove(pi_view)
 
 
 def map_player_list(players: List[Player]) -> Dict[int, Player]:
@@ -390,6 +424,29 @@ def map_player_list(players: List[Player]) -> Dict[int, Player]:
         player_dict[player.player_id] = player
     return player_dict
 
+def map_status_modifier_list(stat_mods: List[StatusModifier]) -> Dict[str, StatusModifier]:
+    stat_mod_dict: Dict[str, StatusModifier] = {}
+    for stat_mod in stat_mods:
+        stat_mod_dict[stat_mod.modifier_name] = stat_mod
+    return stat_mod_dict
+
+def map_skill_list(skills: List[Skill]) -> Dict[str, Skill]:
+    skill_dict: Dict[str, Skill] = {}
+    for skill in skills:
+        skill_dict[skill.skill_name] = skill
+    return skill_dict
+
+def map_resource_definition_list(res_defs: List[ResourceDefinition]) -> Dict[str, ResourceDefinition]:
+    res_def_dict: Dict[str, ResourceDefinition] = {}
+    for res_def in res_defs:
+        res_def_dict[res_def.resource_name] = res_def
+    return res_def_dict
+
+def map_attribute_definition_list(att_defs: List[AttributeDefinition]) -> Dict[str, AttributeDefinition]:
+    att_def_dict: Dict[str, AttributeDefinition] = {}
+    for att_def in att_defs:
+        att_def_dict[att_def.attribute_name] = att_def
+    return att_def_dict
 
 def map_action_list(actions: List[Action]) -> Dict[str, Action]:
     action_dict: Dict[str, Action] = {}
@@ -414,6 +471,7 @@ def read_json_to_dom(filepath: str) -> Game:
             parties_locked = json_object.get("parties_locked")
             voting_locked = json_object.get("voting_locked")
             items_locked = json_object.get("items_locked")
+            resources_locked = json_object.get("resources_locked")
             players = []
             rounds = []
             parties = []
@@ -436,10 +494,12 @@ def read_json_to_dom(filepath: str) -> Game:
                         resource_def_entry.get("resource_max"), -1) if dict_val_ne(resource_def_entry,
                                                                                    'resource_max') else -1
                     is_commodity = resource_def_entry.get("is_commodity")
+                    is_perishable = resource_def_entry.get("is_perishable")
                     res_emoji_text = resource_def_entry.get("emoji_text")
                     resource_defs.append(ResourceDefinition(resource_name=resource_name,
                                                             resource_max=resource_max,
                                                             is_commodity=is_commodity,
+                                                            is_perishable=is_perishable,
                                                             emoji_text=res_emoji_text))
             item_type_defs = []
             if dict_val_ne(json_object, 'item_type_defs'):
@@ -528,12 +588,16 @@ def read_json_to_dom(filepath: str) -> Game:
                         for resource_entry in player_entry.get("player_resources"):
                             resource_type = resource_entry.get("resource_type")
                             resource_amt = int_w_default(resource_entry.get("resource_amt"), 0)
+                            resource_income = int_w_default(resource_entry.get("resource_income"), 0)
                             resource_max = int_w_default(resource_entry.get("resource_max"), -1)
                             is_commodity = resource_entry.get("is_commodity")
+                            is_perishable = resource_entry.get("is_perishable")
                             player_resources.append(Resource(resource_type=resource_type,
                                                              resource_amt=resource_amt,
+                                                             resource_income=resource_income,
                                                              resource_max=resource_max,
-                                                             is_commodity=is_commodity))
+                                                             is_commodity=is_commodity,
+                                                             is_perishable=is_perishable))
                     player_skills = []
                     if dict_val_ne(player_entry, 'player_skills'):
                         for skill_entry in player_entry.get("player_skills"):
@@ -786,6 +850,7 @@ def read_json_to_dom(filepath: str) -> Game:
                         parties_locked=parties_locked,
                         voting_locked=voting_locked,
                         items_locked=items_locked,
+                        resources_locked=resources_locked,
                         players=players,
                         rounds=rounds,
                         parties=parties,
@@ -812,7 +877,8 @@ def write_dom_to_json(game: Game):
         game_dict = {"is_active": game.is_active,
                      "parties_locked": game.parties_locked,
                      "voting_locked": game.voting_locked,
-                     "items_locked": game.items_locked}
+                     "items_locked": game.items_locked,
+                     "resources_locked": game.resources_locked}
         att_def_dicts = []
         for att_def in game.attribute_definitions:
             att_def_dicts.append({"attribute_name": att_def.attribute_name,
@@ -824,6 +890,7 @@ def write_dom_to_json(game: Game):
             res_def_dicts.append({"resource_name": res_def.resource_name,
                                   "resource_max": res_def.resource_max,
                                   "is_commodity": res_def.is_commodity,
+                                  "is_perishable": res_def.is_perishable,
                                   "emoji_text": res_def.emoji_text})
         game_dict["resource_defs"] = res_def_dicts
         item_type_def_dicts = []
@@ -878,8 +945,10 @@ def write_dom_to_json(game: Game):
             for resource in player.player_resources:
                 player_resource_dicts.append({"resource_type": resource.resource_type,
                                               "resource_amt": resource.resource_amt,
+                                              "resource_income": resource.resource_income,
                                               "resource_max": resource.resource_max,
-                                              "is_commodity": resource.is_commodity})
+                                              "is_commodity": resource.is_commodity,
+                                              "is_perishable": resource.is_perishable})
             player_skill_dicts = []
             for skill in player.player_skills:
                 skill_modifies_atts_dicts = []
@@ -1113,13 +1182,17 @@ async def read_players_file(file_path: str, game_attribute_definitions: Dict[str
                 player_resource_split = player_resource.split(':')
                 player_resource_name = player_resource_split[0]
                 player_resource_count = int(player_resource_split[1])
+                player_resource_income = int(player_resource_split[2])
                 if player_resource_name in game_resource_definitions:
                     player_resources.append(Resource(resource_type=player_resource_name,
                                                      resource_amt=player_resource_count,
+                                                     resource_income=player_resource_income,
                                                      resource_max=game_resource_definitions[
                                                          player_resource_name].resource_max,
                                                      is_commodity=game_resource_definitions[
-                                                         player_resource_name].is_commodity))
+                                                         player_resource_name].is_commodity,
+                                                     is_perishable=game_resource_definitions[
+                                                         player_resource_name].is_perishable))
 
         if player_skills_str is not None:
             player_skills_list = list(filter(None, player_skills_str.split(';')))
@@ -1202,10 +1275,12 @@ async def read_resource_definitions_file(file_path: str) -> List[ResourceDefinit
         resource_name = row['resource_name']
         resource_max = int_w_default(row['resource_max'], -1) if dict_val_ne(row, 'resource_max') else -1
         is_commodity = True if dict_val_ne(row, 'is_commodity') and row['is_commodity'] == 'True' else False
+        is_perishable = True if dict_val_ne(row, 'is_perishable') and row['is_perishable'] == 'True' else False
         emoji_text = row['emoji_text'] if dict_val_ne(row, 'emoji_text') else None
         resource_definitions.append(ResourceDefinition(resource_name=resource_name,
                                                        resource_max=resource_max,
                                                        is_commodity=is_commodity,
+                                                       is_perishable=is_perishable,
                                                        emoji_text=emoji_text))
 
     return resource_definitions

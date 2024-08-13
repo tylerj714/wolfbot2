@@ -7,6 +7,7 @@ from typing import List, Optional, Literal, Dict
 import dom.data_model as gdm
 from dom.data_model import Game, Player, Round, Vote, Party, Dilemma
 from dom.conf_vars import ConfVars as Conf
+from utils.string_decorator import emojify
 
 
 async def player_list_autocomplete(interaction: discord.Interaction,
@@ -95,7 +96,7 @@ async def get_valid_dilemma_choices(substr: str, game: Game, dilemma_name: str) 
     game_round = game.get_latest_round()
     if game_round is not None:
         dilemma = game_round.get_dilemma(dilemma_name)
-        for dilemma_choice in dilemma.dilemma_choices:
+        for dilemma_choice in sorted(dilemma.dilemma_choices, key=lambda e: e.lower()):
             if substr and substr.lower() not in dilemma_choice.lower():
                 continue
             choice_list.append(dilemma_choice)
@@ -117,7 +118,7 @@ async def player_item_autocomplete(interaction: discord.Interaction,
 async def get_player_item_choices(substr: str, player: Player) -> List[str]:
     choice_list = []
 
-    for item in player.player_items:
+    for item in sorted(player.player_items, key=lambda e: e.item_name.lower()):
         if substr and substr.lower() not in item.item_name.lower():
             continue
         choice_list.append(item.item_name)
@@ -137,7 +138,7 @@ async def game_item_autocomplete(interaction: discord.Interaction,
 async def get_game_item_choices(substr: str, game: Game) -> List[str]:
     choice_list = []
 
-    for item in game.items:
+    for item in sorted(game.items, key=lambda e: e.item_name.lower()):
         if substr and substr.lower() not in item.item_name.lower():
             continue
         choice_list.append(item.item_name)
@@ -159,13 +160,13 @@ async def player_action_autocomplete(interaction: discord.Interaction,
 async def get_player_action_choices(substr: str, player: Player) -> List[str]:
     choice_list = []
 
-    for action in player.player_actions:
+    for action in sorted(player.player_actions, key=lambda e: e.action_name.lower()):
         if substr and substr.lower() not in action.action_name.lower():
             continue
         choice_list.append(action.action_name)
 
     # Also include item actions, where they are defined
-    for item in player.player_items:
+    for item in sorted(player.player_items, key=lambda e: e.item_name.lower()):
         if item.item_action is not None:
             item_action = item.item_action
             if item_action.action_name is not None:
@@ -189,9 +190,54 @@ async def game_action_autocomplete(interaction: discord.Interaction,
 async def get_game_action_choices(substr: str, game: Game) -> List[str]:
     choice_list = []
 
-    for action in game.actions:
+    for action in sorted(game.actions, key=lambda e: e.action_name.lower()):
         if substr and substr.lower() not in action.action_name.lower():
             continue
         choice_list.append(action.action_name)
+
+    return choice_list[:25]
+
+
+async def resource_type_autocomplete(interaction: discord.Interaction,
+                                     current: str) -> List[app_commands.Choice[str]]:
+    game = await gdm.get_game(file_path=Conf.GAME_PATH)
+
+    resource_type_choices: list[str] = await get_resource_type_names(current, game)
+    return [
+        app_commands.Choice(name=choice, value=choice)
+        for choice in resource_type_choices
+    ]
+
+
+async def get_resource_type_names(substr: str, game: Game) -> list[str]:
+    choice_list: list[str] = []
+
+    for resource_definition in sorted(game.resource_definitions, key=lambda e: e.resource_name.lower()):
+        if substr and substr.lower() not in resource_definition.resource_name.lower():
+            continue
+        display_value = resource_definition.resource_name
+        choice_list.append(display_value)
+
+    return choice_list[:25]
+
+
+async def persistent_view_autocomplete(interaction: discord.Interaction,
+                                       current: str) -> List[app_commands.Choice[str]]:
+    game = await gdm.get_game(file_path=Conf.GAME_PATH)
+
+    view_choices = await get_persistent_view_names(current, game)
+    return [
+        app_commands.Choice(name=choice, value=choice)
+        for choice in view_choices
+    ]
+
+
+async def get_persistent_view_names(substr: str, game: Game) -> List[str]:
+    choice_list = []
+
+    for pi_view in game.pi_views:
+        if substr and substr.lower() not in pi_view.view_name.lower():
+            continue
+        choice_list.append(pi_view.view_name)
 
     return choice_list[:25]

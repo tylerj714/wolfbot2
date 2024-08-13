@@ -6,186 +6,11 @@ from discord import app_commands
 from discord.ext import commands
 from dom.conf_vars import ConfVars as Conf
 import dom.data_model as gdm
-from dom.data_model import PersistentInteractableView
 from bot_logging.logging_manager import log_interaction_call, log_info
 from utils.command_autocompletes import game_item_autocomplete, player_item_autocomplete, player_list_autocomplete, \
     game_action_autocomplete, player_action_autocomplete
 from cogs.moderator_request_management import send_message_to_moderator as modmsg
 from utils.message_formatter import *
-import utils.object_filtering_util as filter_util
-
-action_pi_view_name = "action_view"
-item_pi_view_name = "item_view"
-
-
-class ActionViewButtons(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="All Actions",
-                       style=discord.ButtonStyle.gray,
-                       custom_id=f'all_{action_pi_view_name}',
-                       disabled=True)
-    async def all_actions_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = True
-        initial_message_content = interaction.message.content
-        await interaction.message.edit(content="List is currently being updated...", view=self)
-        await interaction.response.defer(thinking=True, ephemeral=True)
-
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-        action_pi_view = game.get_pi_view(action_pi_view_name)
-        channel = await guild.fetch_channel(action_pi_view.channel_id)
-
-        game_actions: list[Action] = game.actions
-        game_item_actions: list[(str, Action)] = game.get_item_actions()
-        item_action_names = [item_action_entry[1].action_name for item_action_entry in game_item_actions]
-        non_item_game_actions = [action for action in game_actions if action.action_name not in item_action_names]
-
-        formatted_responses: list[str] = await construct_action_display(actions=non_item_game_actions,
-                                                                        item_actions=game_item_actions,
-                                                                        guild=guild,
-                                                                        game=game)
-
-        i = 0
-        while i < len(action_pi_view.message_ids):
-            msg_id = action_pi_view.message_ids[i]
-            msg = await channel.fetch_message(msg_id)
-            if i < len(formatted_responses):
-                await msg.edit(content=formatted_responses[i])
-            else:
-                await msg.edit(content=".")
-            i += 1
-
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = False
-        await interaction.message.edit(content=initial_message_content, view=self)
-        await interaction.followup.send("Update complete!")
-
-    @discord.ui.button(label="Common Actions",
-                       style=discord.ButtonStyle.gray,
-                       custom_id=f'common_{action_pi_view_name}',)
-    async def common_actions_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = True
-        initial_message_content = interaction.message.content
-        await interaction.message.edit(content="List is currently being updated...", view=self)
-        await interaction.response.defer(thinking=True, ephemeral=True)
-
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-        action_pi_view = game.get_pi_view(action_pi_view_name)
-        channel = await guild.fetch_channel(action_pi_view.channel_id)
-
-        game_actions: list[Action] = game.actions
-        filtered_game_actions = await filter_util.filter_actions_by_criteria(action_list=game_actions,
-                                                                             action_class="Common")
-
-        formatted_responses: list[str] = await construct_action_display(actions=filtered_game_actions,
-                                                                        guild=guild,
-                                                                        game=game)
-
-        i = 0
-        while i < len(action_pi_view.message_ids):
-            msg_id = action_pi_view.message_ids[i]
-            msg = await channel.fetch_message(msg_id)
-            if i < len(formatted_responses):
-                await msg.edit(content=formatted_responses[i])
-            else:
-                await msg.edit(content=".")
-            i += 1
-
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = False
-        await interaction.message.edit(content=initial_message_content, view=self)
-        await interaction.followup.send("Update complete!")
-
-    @discord.ui.button(label="Unique Actions",
-                       style=discord.ButtonStyle.gray,
-                       custom_id=f'unique_{action_pi_view_name}',)
-    async def unique_actions_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = True
-        initial_message_content = interaction.message.content
-        await interaction.message.edit(content="List is currently being updated...", view=self)
-        await interaction.response.defer(thinking=True, ephemeral=True)
-
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-        action_pi_view = game.get_pi_view(action_pi_view_name)
-        channel = await guild.fetch_channel(action_pi_view.channel_id)
-
-        game_actions: list[Action] = game.actions
-        filtered_game_actions = await filter_util.filter_actions_by_criteria(action_list=game_actions,
-                                                                             action_class="Unique")
-
-        formatted_responses: list[str] = await construct_action_display(actions=filtered_game_actions,
-                                                                        guild=guild,
-                                                                        game=game)
-
-        i = 0
-        while i < len(action_pi_view.message_ids):
-            msg_id = action_pi_view.message_ids[i]
-            msg = await channel.fetch_message(msg_id)
-            if i < len(formatted_responses):
-                await msg.edit(content=formatted_responses[i])
-            else:
-                await msg.edit(content=".")
-            i += 1
-
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = False
-        await interaction.message.edit(content=initial_message_content, view=self)
-        await interaction.followup.send("Update complete!")
-
-    @discord.ui.button(label="Item Actions",
-                       style=discord.ButtonStyle.gray,
-                       custom_id=f'items_{action_pi_view_name}',)
-    async def item_actions_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        button.disabled = True
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = True
-        initial_message_content = interaction.message.content
-        await interaction.message.edit(content="List is currently being updated...", view=self)
-        await interaction.response.defer(thinking=True, ephemeral=True)
-
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-        action_pi_view = game.get_pi_view(action_pi_view_name)
-        channel = await guild.fetch_channel(action_pi_view.channel_id)
-
-        game_item_actions: list[(str, Action)] = game.get_item_actions()
-
-        formatted_responses: list[str] = await construct_action_display(item_actions=game_item_actions,
-                                                                        guild=guild,
-                                                                        game=game)
-
-        i = 0
-        while i < len(action_pi_view.message_ids):
-            msg_id = action_pi_view.message_ids[i]
-            msg = await channel.fetch_message(msg_id)
-            if i < len(formatted_responses):
-                await msg.edit(content=formatted_responses[i])
-            else:
-                await msg.edit(content=".")
-            i += 1
-
-        for view_child in self.children:
-            if type(view_child) == discord.ui.Button and view_child is not button:
-                view_child.disabled = False
-        await interaction.message.edit(content=initial_message_content, view=self)
-        await interaction.followup.send("Update complete!")
 
 
 class ActionItemManager(commands.Cog):
@@ -222,8 +47,9 @@ class ActionItemManager(commands.Cog):
         guild = interaction.guild
 
         game_player = game.get_player(interaction.user.id)
+        sorted_player_items = sorted(game_player.player_items, key=lambda e: e.item_name.lower())
 
-        formatted_responses = await construct_item_display(player=game_player, items=game_player.player_items,
+        formatted_responses = await construct_item_display(player=game_player, items=sorted_player_items,
                                                            guild=guild, game=game)
 
         for response in formatted_responses:
@@ -242,8 +68,9 @@ class ActionItemManager(commands.Cog):
         guild = interaction.guild
 
         game_player = game.get_player(int(player))
+        sorted_player_items = sorted(game_player.player_items, key=lambda e: e.item_name.lower())
 
-        formatted_responses = await construct_item_display(player=game_player, items=game_player.player_items,
+        formatted_responses = await construct_item_display(player=game_player, items=sorted_player_items,
                                                            guild=guild, game=game)
 
         for response in formatted_responses:
@@ -483,9 +310,16 @@ class ActionItemManager(commands.Cog):
 
         player_actions = game_player.player_actions
         player_item_actions: list[(str, Action)] = game_player.get_item_actions()
+        item_action_names = [item_action_entry[1].action_name for item_action_entry in player_item_actions]
+        non_item_player_actions = [action for action in player_actions if action.action_name not in item_action_names]
+        sorted_player_item_actions = sorted(player_item_actions, key=lambda e: e[0].lower())
+        sorted_non_item_player_actions = sorted(non_item_player_actions, key=lambda e: e.action_name.lower())
 
-        formatted_responses = await construct_action_display(player=game_player, actions=player_actions,
-                                                             item_actions=player_item_actions, guild=guild, game=game)
+        formatted_responses = await construct_action_display(player=game_player,
+                                                             actions=sorted_non_item_player_actions,
+                                                             item_actions=sorted_player_item_actions,
+                                                             guild=guild,
+                                                             game=game)
 
         for response in formatted_responses:
             await interaction.followup.send(f'{response}', ephemeral=True)
@@ -506,12 +340,110 @@ class ActionItemManager(commands.Cog):
 
         player_actions = game_player.player_actions
         player_item_actions: list[(str, Action)] = game_player.get_item_actions()
+        item_action_names = [item_action_entry[1].action_name for item_action_entry in player_item_actions]
+        non_item_player_actions = [action for action in player_actions if action.action_name not in item_action_names]
+        sorted_player_item_actions = sorted(player_item_actions, key=lambda e: e[0].lower())
+        sorted_non_item_player_actions = sorted(non_item_player_actions, key=lambda e: e.action_name.lower())
 
-        formatted_responses = await construct_action_display(player=game_player, actions=player_actions,
-                                                             item_actions=player_item_actions, guild=guild, game=game)
+        formatted_responses = await construct_action_display(player=game_player,
+                                                             actions=sorted_non_item_player_actions,
+                                                             item_actions=sorted_player_item_actions,
+                                                             guild=guild,
+                                                             game=game)
 
         for response in formatted_responses:
             await interaction.followup.send(f'{response}', ephemeral=True)
+
+    @app_commands.command(name="actions-player-add-uses",
+                          description="Adds an action to the chosen player's action list")
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.autocomplete(player=player_list_autocomplete)
+    @app_commands.autocomplete(action=player_action_autocomplete)
+    async def actions_player_add_uses(self,
+                                      interaction: discord.Interaction,
+                                      player: str,
+                                      action: str,
+                                      uses_to_add: app_commands.Range[int, 1, 5]):
+        log_interaction_call(interaction)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        game = await gdm.get_game(file_path=Conf.GAME_PATH)
+        guild = interaction.guild
+
+        game_player = game.get_player(int(player))
+        player_action = game_player.get_action(action)
+
+        if game_player is None:
+            await interaction.followup.send(f'No valid player found with that identifier in the current game!')
+            return
+        if player_action is None:
+            await interaction.followup.send(
+                f'No action {action} could be found for the player {game_player.player_discord_name}!')
+            return
+
+        player_action.action_uses = player_action.action_uses + uses_to_add
+
+        await gdm.write_game(game=game)
+
+        formatted_responses = await construct_action_change_display(status='uses_increment', action=player_action,
+                                                                    guild=guild,
+                                                                    game=game, uses_changed=uses_to_add)
+
+        player_mod_channel = await interaction.guild.fetch_channel(
+            game_player.player_mod_channel) if game_player.player_mod_channel is not None else None
+        if player_mod_channel is not None:
+            for response in formatted_responses:
+                await player_mod_channel.send(f'{response}')
+
+        await interaction.followup.send(
+            f'Added {uses_to_add} uses to the action {action} of player {game_player.player_discord_name}!',
+            ephemeral=True)
+
+    @app_commands.command(name="actions-player-remove-uses",
+                          description="Adds an action to the chosen player's action list")
+    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.autocomplete(player=player_list_autocomplete)
+    @app_commands.autocomplete(action=player_action_autocomplete)
+    async def actions_player_remove_uses(self,
+                                         interaction: discord.Interaction,
+                                         player: str,
+                                         action: str,
+                                         uses_to_remove: app_commands.Range[int, 1, 5]):
+        log_interaction_call(interaction)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        game = await gdm.get_game(file_path=Conf.GAME_PATH)
+        guild = interaction.guild
+
+        game_player = game.get_player(int(player))
+        player_action = game_player.get_action(action)
+
+        if game_player is None:
+            await interaction.followup.send(f'No valid player found with that identifier in the current game!')
+            return
+        if player_action is None:
+            await interaction.followup.send(
+                f'No action {action} could be found for the player {game_player.player_discord_name}!')
+            return
+
+        if player_action.action_uses <= uses_to_remove:
+            player_action.action_uses = 0
+        else:
+            player_action.action_uses = player_action.action_uses - uses_to_remove
+
+        await gdm.write_game(game=game)
+
+        formatted_responses = await construct_action_change_display(status='uses_decrement', action=player_action,
+                                                                    guild=guild,
+                                                                    game=game, uses_changed=uses_to_remove)
+
+        player_mod_channel = await interaction.guild.fetch_channel(
+            game_player.player_mod_channel) if game_player.player_mod_channel is not None else None
+        if player_mod_channel is not None:
+            for response in formatted_responses:
+                await player_mod_channel.send(f'{response}')
+
+        await interaction.followup.send(
+            f'Removed {uses_to_remove} uses from the action {action} of player {game_player.player_discord_name}!',
+            ephemeral=True)
 
     @app_commands.command(name="actions-player-add",
                           description="Adds an action to the chosen player's action list")
@@ -595,52 +527,6 @@ class ActionItemManager(commands.Cog):
 
         await interaction.followup.send(
             f'Removed the action {action} from player {game_player.player_discord_name}!', ephemeral=True)
-
-    @app_commands.command(name="actions-generate-persistent-view",
-                          description="Creates a persistent view of actions that can be filtered using buttons")
-    @app_commands.default_permissions(manage_guild=True)
-    async def actions_generate_persistent_view(self,
-                                               interaction: discord.Interaction,
-                                               action_view_channel: Optional[discord.TextChannel]):
-        log_interaction_call(interaction)
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-
-        if action_pi_view_name in [pi_view.view_name for pi_view in game.pi_views]:
-            await interaction.followup.send(f'Persistent View with name {action_pi_view_name} already exists! '
-                                            f'Please delete this view before attempting to create a new one!',
-                                            ephemeral=True)
-            return
-
-        if not action_view_channel:
-            action_view_channel = interaction.channel
-
-        game_actions: list[Action] = game.actions
-        game_item_actions: list[(str, Action)] = game.get_item_actions()
-        item_action_names = [item_action_entry[1].action_name for item_action_entry in game_item_actions]
-        non_item_game_actions = [action for action in game_actions if action.action_name not in item_action_names]
-
-        formatted_responses = await construct_action_display(actions=non_item_game_actions,
-                                                             item_actions=game_item_actions,
-                                                             guild=guild, game=game)
-
-        msg_channel_ids = []
-        for response in formatted_responses:
-            sent_message = await action_view_channel.send(f'{response}')
-            msg_channel_ids.append(sent_message.id)
-
-        button_message = await action_view_channel.send("Use the buttons below to filter the action list.",
-                                                        view=ActionViewButtons())
-
-        game.pi_views.append(PersistentInteractableView(view_name=action_pi_view_name,
-                                                        channel_id=action_view_channel.id,
-                                                        message_ids=msg_channel_ids,
-                                                        button_msg_id=button_message.id))
-
-        await gdm.write_game(game=game)
-
-        await interaction.followup.send(f'Created persistent view in channel {action_view_channel.name} for Actions!')
 
 
 async def setup(bot: commands.Bot) -> None:
