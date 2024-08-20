@@ -23,9 +23,7 @@ class ItemViewButtons(discord.ui.View):
             if type(view_child) == discord.ui.Button and view_child is not button:
                 view_child.disabled = True
 
-        time.sleep(2)
         await interaction.message.edit(content="List is currently being updated...", view=self)
-        time.sleep(2)
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         game = await gdm.get_game(file_path=Conf.GAME_PATH)

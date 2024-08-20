@@ -185,7 +185,15 @@ async def construct_item_transfer_display(guild: Guild, action: Literal['gained'
 
 
 async def format_item(item: Item, game: Game) -> str:
-    formatted_item = f'- **{item.item_name}**'
+    formatted_item = f'-'
+    if item.item_type is not None:
+        game_item_type_defs = game.get_item_type_definitions()
+        if item.item_type in game_item_type_defs:
+            item_type_def_str = game_item_type_defs[item.item_type].emoji_text
+        else:
+            item_type_def_str = item.item_type
+        formatted_item += f' {item_type_def_str}'
+    formatted_item += f' **{item.item_name}**'
     if item.item_properties is not None:
         formatted_item += f' - {item.item_properties}\n'
     formatted_item += f'{item.item_descr}'

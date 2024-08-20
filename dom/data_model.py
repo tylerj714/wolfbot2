@@ -118,6 +118,10 @@ class Player:
         for action in self.player_actions:
             if action.action_name == action_name:
                 specific_action = action
+        for item in self.player_items:
+            if item.item_action is not None:
+                if item.item_action.action_name == action_name:
+                    specific_action = item.item_action
         return specific_action
 
     def add_action(self, action: Action):
@@ -393,6 +397,12 @@ class Game:
                 item_tuple = (item.item_name, item.item_action)
                 item_actions.append(item_tuple)
         return item_actions
+
+    def get_item_type_definitions(self) -> Dict[str, ItemTypeDefinition]:
+        item_type_def_dict: Dict[str, ItemTypeDefinition] = {}
+        for item_type_def in self.item_type_definitions:
+            item_type_def_dict[item_type_def.item_type] = item_type_def
+        return item_type_def_dict
 
     def get_resource_definitions(self) -> Dict[str, ResourceDefinition]:
         res_def_dict: Dict[str, ResourceDefinition] = {}

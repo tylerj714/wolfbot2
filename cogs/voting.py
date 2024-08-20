@@ -106,8 +106,8 @@ class VotingManager(commands.Cog):
             return
         else:
             message_id = await create_and_pin_report_message(channel=report_channel,
-                                                       report_name=f'{latest_round.round_number + 1}',
-                                                       report_type="Round")
+                                                             report_name=f'{latest_round.round_number + 1}',
+                                                             report_type="Round")
             new_round = Round(votes=[], round_channel_id=report_channel.id, round_message_id=message_id,
                               round_dilemmas=[], round_number=latest_round.round_number + 1, is_active_round=True)
             game.add_round(new_round)
@@ -454,7 +454,8 @@ class VotingManager(commands.Cog):
     @app_commands.autocomplete(dilemma_choice=dilemma_choice_autocomplete)
     async def dilemma_vote(self, interaction: discord.Interaction,
                            dilemma_name: str,
-                           dilemma_choice: str):
+                           dilemma_choice: Optional[str] = None,
+                           other_choices: Optional[Literal['Unvote']] = None):
         log_interaction_call(interaction)
         game = await gdm.get_game(file_path=Conf.GAME_PATH)
 
@@ -485,15 +486,24 @@ class VotingManager(commands.Cog):
                 ephemeral=True)
             return
 
-        if dilemma_choice not in player_dilemma.dilemma_choices:
+        if dilemma_choice is None and other_choices is None:
+            await interaction.response.send_message(
+                f'You must select either a dilemma choice or an other choice option!',
+                ephemeral=True)
+            return
+
+        if dilemma_choice is not None and dilemma_choice not in player_dilemma.dilemma_choices:
             await interaction.response.send_message(
                 f'The choice {dilemma_choice} is not a valid selection for your current dilemma!')
             return
 
         dilemma_current_player_vote = player_dilemma.get_player_vote(requesting_player.player_id)
 
-        if dilemma_current_player_vote is None:
+        if dilemma_current_player_vote is None and dilemma_choice is not None:
             player_dilemma.add_vote(Vote(requesting_player.player_id, dilemma_choice, round(time.time())))
+        elif dilemma_current_player_vote is not None and other_choices == 'Unvote':
+            player_dilemma.remove_vote(dilemma_current_player_vote)
+            dilemma_choice = 'Unvote'
         else:
             dilemma_current_player_vote.choice = dilemma_choice
             dilemma_current_player_vote.timestamp = round(time.time())
@@ -553,8 +563,8 @@ class VotingManager(commands.Cog):
         if player_dilemma is None:
             await interaction.response.send_message(f'No active dilemma found!', ephemeral=True)
 
-        formatted_votes = construct_vote_report(game=game, report_name=dilemma_name, report_type="Dilemma",
-                                                votes=player_dilemma.dilemma_votes)
+        formatted_votes = await construct_vote_report(game=game, report_name=dilemma_name, report_type="Dilemma",
+                                                      votes=player_dilemma.dilemma_votes)
 
         dilemma_channel = interaction.guild.get_channel(player_dilemma.dilemma_channel_id)
 

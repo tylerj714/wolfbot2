@@ -44,7 +44,7 @@ class PersistentViewManager(commands.Cog):
         game.remove_pi_view(view_name)
         await gdm.write_game(game)
 
-        await interaction.response.send_message(f'Deleted persistent view {view_name}!')
+        await interaction.followup.send(f'Deleted persistent view {view_name}!')
 
 
 async def setup(bot: commands.Bot) -> None:
