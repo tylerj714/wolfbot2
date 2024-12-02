@@ -1,7 +1,8 @@
 import time
 from typing import Optional, List, Literal
 from discord import Guild
-from dom.data_model import Player, Action, Item, Game, ResourceDefinition, ResourceCost, Resource
+from dom.data_model import Player, Action, Item, Game, ResourceDefinition, ResourceCost, Resource, AttributeDefinition, \
+    Attribute
 import utils.string_decorator as sdec
 
 uses_to_emoji_map = {0: ":uses_zero:",
@@ -106,7 +107,17 @@ async def construct_action_change_display(guild: Guild,
 
 
 async def format_action(action: Action, game: Game, item_name: Optional[str] = None) -> str:
-    formatted_action = f'- **{action.action_name}**:'
+    formatted_action = ""
+    # TODO: Implement action classes
+    # if action.action_classes and action.action_classes is not None:
+    #     game_action_class_defs = game.get_action_class_definitions()
+    #     for action_class in action.action_classes:
+    #         if action_class.action_class_name in game_action_class_defs:
+    #             action_class_def_str = game_action_class_defs[action_class.action_class_name].emoji_text
+    #         else:
+    #             action_class_def_str = action_class.action_class_name
+    #         formatted_action += f' {action_class_def_str}'
+    formatted_action += f'- **{action.action_name}**:'
     if item_name:
         formatted_action += f' *(from {item_name})*'
     if action.action_timing:
@@ -193,10 +204,10 @@ async def format_item(item: Item, game: Game) -> str:
         else:
             item_type_def_str = item.item_type
         formatted_item += f' {item_type_def_str}'
-    formatted_item += f' **{item.item_name}**'
+    formatted_item += f' **{item.item_name}**\n'
     if item.item_properties is not None:
         formatted_item += f' - {item.item_properties}\n'
-    formatted_item += f'{item.item_descr}'
+    formatted_item += f'  - *{item.item_descr}*\n'
     if item.item_action is not None and item.item_action.action_name:
         item_action = item.item_action
         formatted_item += '\n'
@@ -220,6 +231,110 @@ async def format_item(item: Item, game: Game) -> str:
         formatted_item += f'- {item_action.action_desc}'
     formatted_item += '\n'
     return formatted_item
+
+
+async def format_attribute(attribute_amt: int, attribute_definition: AttributeDefinition) -> str:
+    if attribute_definition and attribute_definition.emoji_text:
+        attribute_string = f"{attribute_amt} {attribute_definition.emoji_text} {attribute_definition.attribute_name}"
+    else:
+        attribute_string = f"{attribute_amt} {attribute_definition.attribute_name}"
+    return attribute_string
+
+
+async def construct_attribute_modified_display(guild: Guild, action: Literal['increased', 'decreased'],
+                                               player_attribute: Attribute, att_change_amt: int, game: Game) -> List[str]:
+    formatted_responses = []
+    formatted_attribute = ""
+
+    attribute_definition: AttributeDefinition = game.get_attribute_definition_by_name(player_attribute.name)
+    attribute_string = await format_attribute(attribute_amt=player_attribute.level,
+                                              attribute_definition=attribute_definition)
+    change_att_str = await format_attribute(attribute_amt=att_change_amt, attribute_definition=attribute_definition)
+
+    if action == 'increased':
+        formatted_attribute += f'You have **gained** {change_att_str}!\n'
+    elif action == 'decreased':
+        formatted_attribute += f'You have **lost** {change_att_str}\n'
+    formatted_attribute += f'You now have {attribute_string}'
+
+    formatted_responses.append(await sdec.format_text(text=formatted_attribute, guild=guild))
+
+    return formatted_responses
+
+
+async def construct_player_attributes_display(player: Player, guild: Guild, game: Game) -> List[str]:
+    formatted_responses = []
+
+    formatted_attributes = ""
+
+    formatted_player_attribute_header = f'**Player {player.player_discord_name} Attributes as of <t:{int(time.time())}>**\n'
+    formatted_responses.append(formatted_player_attribute_header)
+
+    for player_attribute in player.player_attributes:
+        att_def: AttributeDefinition = game.get_attribute_definition_by_name(player_attribute.name)
+
+        this_formatted_attribute = await format_attribute(attribute_amt=player_attribute.level,
+                                                          attribute_definition=att_def) + "\n"
+        if len(await sdec.format_text(text=formatted_attributes, guild=guild)) + len(
+                await sdec.format_text(text=this_formatted_attribute, guild=guild)) <= 1750:
+            formatted_attributes += this_formatted_attribute
+        else:
+            formatted_responses.append(await sdec.format_text(text=formatted_attributes, guild=guild))
+            formatted_attributes = ""
+            formatted_attributes += this_formatted_attribute
+    if formatted_attributes:
+        formatted_responses.append(await sdec.format_text(text=formatted_attributes, guild=guild))
+
+    return formatted_responses
+
+
+async def format_attribute_row(attribute_defs: dict[str, AttributeDefinition], player: Player) -> str:
+
+    attribute_substrs = []
+    player_name = (player.player_discord_name[:23] + '..') if len(player.player_discord_name) > 25 else '{:25}'.format(player.player_discord_name)
+    attribute_substrs.append(f"{player_name}")
+
+    for attribute in player.player_attributes:
+        attribute_def = attribute_defs.get(attribute.name, None)
+
+        att_lvl = attribute.level
+        att_emoji = attribute_def.emoji_text if attribute_def else ""
+        att_name = attribute_def.attribute_name if attribute_def else attribute.name
+
+        if att_emoji:
+            attribute_substrs.append(f"{att_lvl} {att_emoji} {att_name}")
+        else:
+            attribute_substrs.append(f"{att_lvl} {att_name}")
+
+    attribute_string = ' | '.join(attribute_substrs) + "\n"
+
+    return attribute_string
+
+
+async def construct_player_attributes_display_table(players: List[Player], guild: Guild, game: Game) -> List[str]:
+    formatted_responses = []
+
+    formatted_attributes = ""
+
+    formatted_player_attribute_header = f'**Aggregate Player Attributes as of <t:{int(time.time())}>**\n'
+    formatted_responses.append(formatted_player_attribute_header)
+
+    att_defs: dict[str, AttributeDefinition] = game.get_attribute_definitions()
+
+    for player in players:
+        formatted_attribute_row = await format_attribute_row(attribute_defs=att_defs, player=player)
+
+        if len(await sdec.format_text(text=formatted_attributes, guild=guild)) + len(
+                await sdec.format_text(text=formatted_attribute_row, guild=guild)) <= 1500:
+            formatted_attributes += formatted_attribute_row
+        else:
+            formatted_responses.append(await sdec.format_text(text=formatted_attributes, guild=guild))
+            formatted_attributes = ""
+            formatted_attributes += formatted_attribute_row
+    if formatted_attributes:
+        formatted_responses.append(await sdec.format_text(text=formatted_attributes, guild=guild))
+
+    return formatted_responses
 
 
 async def format_resource(resource_amt: int, resource_definition: ResourceDefinition) -> str:
@@ -281,6 +396,55 @@ async def construct_player_resources_display(player: Player, guild: Guild, game:
             formatted_responses.append(await sdec.format_text(text=formatted_resources, guild=guild))
             formatted_resource = ""
             formatted_resource += this_formatted_resource
+    if formatted_resources:
+        formatted_responses.append(await sdec.format_text(text=formatted_resources, guild=guild))
+
+    return formatted_responses
+
+
+async def format_resource_row(resource_defs: dict[str, ResourceDefinition], player: Player) -> str:
+
+    resource_substrs = []
+    player_name = (player.player_discord_name[:23] + '..') if len(player.player_discord_name) > 25 else '{:25}'.format(player.player_discord_name)
+    resource_substrs.append(f"{player_name}")
+
+    for resource in player.player_resources:
+        resource_def = resource_defs.get(resource.resource_type, None)
+
+        att_lvl = resource.resource_amt
+        att_emoji = resource_def.emoji_text if resource_def else ""
+        att_name = resource_def.resource_name if resource_def else resource.resource_type
+
+        if att_emoji:
+            resource_substrs.append(f"{att_lvl} {att_emoji} {att_name}")
+        else:
+            resource_substrs.append(f"{att_lvl} {att_name}")
+
+    resource_string = ' | '.join(resource_substrs) + "\n"
+
+    return resource_string
+
+
+async def construct_player_resources_display_table(players: List[Player], guild: Guild, game: Game) -> List[str]:
+    formatted_responses = []
+
+    formatted_resources = ""
+
+    formatted_player_resource_header = f'**Aggregate Player Resources as of <t:{int(time.time())}>**\n'
+    formatted_responses.append(formatted_player_resource_header)
+
+    res_defs: dict[str, ResourceDefinition] = game.get_resource_definitions()
+
+    for player in players:
+        formatted_resource_row = await format_resource_row(resource_defs=res_defs, player=player)
+
+        if len(await sdec.format_text(text=formatted_resources, guild=guild)) + len(
+                await sdec.format_text(text=formatted_resource_row, guild=guild)) <= 1500:
+            formatted_resources += formatted_resource_row
+        else:
+            formatted_responses.append(await sdec.format_text(text=formatted_resources, guild=guild))
+            formatted_resources = ""
+            formatted_resources += formatted_resource_row
     if formatted_resources:
         formatted_responses.append(await sdec.format_text(text=formatted_resources, guild=guild))
 

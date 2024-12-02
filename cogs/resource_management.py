@@ -45,6 +45,8 @@ class ResourceManager(commands.Cog):
                     player_resource.resource_amt = 0
                 if player_resource.resource_income and player_resource.resource_income > 0:
                     player_resource.resource_amt += player_resource.resource_income
+                    if player_resource.resource_amt > player_resource.resource_max:
+                        player_resource.resource_amt = player_resource.resource_max
                     income_responses = await construct_resource_modified_display(action='income',
                                                                                  player_resource=player_resource,
                                                                                  res_change_amt=player_resource.resource_income,
@@ -86,6 +88,28 @@ class ResourceManager(commands.Cog):
             return
 
         player_resource_responses = await construct_player_resources_display(player=game_player, game=game, guild=guild)
+
+        for response in player_resource_responses:
+            await interaction.followup.send(f'{response}', ephemeral=True)
+
+    @app_commands.command(name="resource-player-view-all",
+                          description="Generates a display of all player's resources")
+    @app_commands.default_permissions(manage_guild=True)
+    async def resource_player_view_all(self,
+                                   interaction: discord.Interaction):
+        log_interaction_call(interaction)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        game = await gdm.get_game(file_path=Conf.GAME_PATH)
+        guild = interaction.guild
+        game_players = game.players
+
+        if not game_players:
+            await interaction.followup.send(f'No players found for this game!')
+            return
+
+        player_resource_responses = await construct_player_resources_display_table(players=game_players,
+                                                                                   game=game,
+                                                                                   guild=guild)
 
         for response in player_resource_responses:
             await interaction.followup.send(f'{response}', ephemeral=True)

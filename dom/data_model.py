@@ -169,6 +169,24 @@ class Player:
         else:
             logger.warn(f"Attempted to add resource {resource_name} to player, but player does not have this resource!")
 
+    def get_attribute(self, attribute_name: str) -> Optional[Attribute]:
+        for attribute in self.player_attributes:
+            if attribute.name == attribute_name:
+                return attribute
+        return None
+
+    def modify_attribute(self, attribute_name: str, amt: int):
+        attribute_to_modify = self.get_attribute(attribute_name=attribute_name)
+        if attribute_to_modify:
+            if attribute_to_modify.max_level != -1 and attribute_to_modify.level + amt >= attribute_to_modify.max_level:
+                attribute_to_modify.level = attribute_to_modify.max_level
+            elif attribute_to_modify.level + amt <= 0:
+                attribute_to_modify.level = 0
+            else:
+                attribute_to_modify.level = attribute_to_modify.level + amt
+        else:
+            logger.warn(f"Attempted to modify {attribute_name} of player, but player does not have this attribute!")
+
 
 class Vote:
     def __init__(self, player_id: int, choice: str, timestamp: int):
@@ -403,6 +421,18 @@ class Game:
         for item_type_def in self.item_type_definitions:
             item_type_def_dict[item_type_def.item_type] = item_type_def
         return item_type_def_dict
+
+    def get_attribute_definitions(self) -> Dict[str, AttributeDefinition]:
+        att_def_dict: Dict[str, AttributeDefinition] = {}
+        for att_def in self.attribute_definitions:
+            att_def_dict[att_def.attribute_name] = att_def
+        return att_def_dict
+
+    def get_attribute_definition_by_name(self, attribute_name: str) -> Optional[AttributeDefinition]:
+        for att_def in self.attribute_definitions:
+            if att_def.attribute_name == attribute_name:
+                return att_def
+        return None
 
     def get_resource_definitions(self) -> Dict[str, ResourceDefinition]:
         res_def_dict: Dict[str, ResourceDefinition] = {}

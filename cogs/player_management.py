@@ -174,7 +174,7 @@ class PlayerManager(commands.Cog):
         await gdm.write_game(game=game)
         await interaction.response.send_message(
             f'Added player {game_player.player_discord_name} to party {game_party.party_name}!', ephemeral=True)
-        await party_channel.send(f'**{game_player.player_discord_name}** has joined {existing_party.party_name}!')
+        await party_channel.send(f'**{game_player.player_discord_name}** has joined {game_party.party_name}!')
 
     @app_commands.command(name="remove-party-player",
                           description="Removes a player from a party and manages text channel permissions")

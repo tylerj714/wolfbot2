@@ -67,16 +67,15 @@ async def get_valid_dilemma_names(substr: str, game: Game, member: Member) -> Li
     game_round = game.get_latest_round()
     if game_round is not None:
         if member.guild_permissions.manage_guild:
-            dilemma_list.append(game_round.round_dilemmas)
+            dilemma_list.extend(game_round.round_dilemmas)
         else:
             for round_dilemma in game_round.round_dilemmas:
                 if member.id in round_dilemma.dilemma_player_ids:
                     dilemma_list.append(round_dilemma)
-        round_dilemmas = game_round.round_dilemmas
-        for round_dilemma in round_dilemmas:
-            if substr and substr.lower() not in round_dilemma.dilemma_name.lower():
+        for a_dilemma in dilemma_list:
+            if substr and substr.lower() not in a_dilemma.dilemma_name.lower():
                 continue
-            name_list.append(round_dilemma.dilemma_name)
+            name_list.append(a_dilemma.dilemma_name)
     return name_list[:25]
 
 
@@ -194,6 +193,29 @@ async def get_game_action_choices(substr: str, game: Game) -> List[str]:
         if substr and substr.lower() not in action.action_name.lower():
             continue
         choice_list.append(action.action_name)
+
+    return choice_list[:25]
+
+
+async def attribute_type_autocomplete(interaction: discord.Interaction,
+                                      current: str) -> List[app_commands.Choice[str]]:
+    game = await gdm.get_game(file_path=Conf.GAME_PATH)
+
+    attribute_type_choices: list[str] = await get_attribute_type_names(current, game)
+    return [
+        app_commands.Choice(name=choice, value=choice)
+        for choice in attribute_type_choices
+    ]
+
+
+async def get_attribute_type_names(substr: str, game: Game) -> list[str]:
+    choice_list: list[str] = []
+
+    for attribute_definition in sorted(game.attribute_definitions, key=lambda e: e.attribute_name.lower()):
+        if substr and substr.lower() not in attribute_definition.attribute_name.lower():
+            continue
+        display_value = attribute_definition.attribute_name
+        choice_list.append(display_value)
 
     return choice_list[:25]
 

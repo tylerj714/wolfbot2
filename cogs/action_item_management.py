@@ -17,24 +17,24 @@ class ActionItemManager(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="items-handbook-view",
-                          description="Displays an item from the spellbook")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
-    @app_commands.autocomplete(item=game_item_autocomplete)
-    async def items_handbook_view(self,
-                                  interaction: discord.Interaction,
-                                  item: str):
-        log_interaction_call(interaction)
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-
-        item = game.get_item(item_name=item)
-
-        formatted_responses = await construct_item_display(items=[item], from_spellbook=True, guild=guild, game=game)
-
-        for responses in formatted_responses:
-            await interaction.followup.send(f'{responses}', ephemeral=True)
+    # @app_commands.command(name="items-handbook-view",
+    #                       description="Displays an item from the spellbook")
+    # @app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
+    # @app_commands.autocomplete(item=game_item_autocomplete)
+    # async def items_handbook_view(self,
+    #                               interaction: discord.Interaction,
+    #                               item: str):
+    #     log_interaction_call(interaction)
+    #     await interaction.response.defer(ephemeral=True, thinking=True)
+    #     game = await gdm.get_game(file_path=Conf.GAME_PATH)
+    #     guild = interaction.guild
+    #
+    #     item = game.get_item(item_name=item)
+    #
+    #     formatted_responses = await construct_item_display(items=[item], from_spellbook=True, guild=guild, game=game)
+    #
+    #     for responses in formatted_responses:
+    #         await interaction.followup.send(f'{responses}', ephemeral=True)
 
     @app_commands.command(name="items-inventory-view",
                           description="Displays all current items in your inventory")
@@ -272,25 +272,25 @@ class ActionItemManager(commands.Cog):
             for item_gained_response in item_gained_formatted_responses:
                 await receiving_player_mod_channel.send(f'{item_gained_response}')
 
-    @app_commands.command(name="actions-handbook-view",
-                          description="Displays a chosen action from the public spellbook")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
-    @app_commands.autocomplete(action=game_action_autocomplete)
-    async def actions_handbook_view(self,
-                                    interaction: discord.Interaction,
-                                    action: str):
-        log_interaction_call(interaction)
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        game = await gdm.get_game(file_path=Conf.GAME_PATH)
-        guild = interaction.guild
-
-        action = game.get_action(action_name=action)
-
-        formatted_responses = await construct_action_display(actions=[action], from_spellbook=True, guild=guild,
-                                                             game=game)
-
-        for response in formatted_responses:
-            await interaction.followup.send(f'{response}', ephemeral=True)
+    # @app_commands.command(name="actions-handbook-view",
+    #                       description="Displays a chosen action from the public spellbook")
+    # @app_commands.checks.cooldown(1, 5, key=lambda i: i.guild_id)
+    # @app_commands.autocomplete(action=game_action_autocomplete)
+    # async def actions_handbook_view(self,
+    #                                 interaction: discord.Interaction,
+    #                                 action: str):
+    #     log_interaction_call(interaction)
+    #     await interaction.response.defer(ephemeral=True, thinking=True)
+    #     game = await gdm.get_game(file_path=Conf.GAME_PATH)
+    #     guild = interaction.guild
+    #
+    #     action = game.get_action(action_name=action)
+    #
+    #     formatted_responses = await construct_action_display(actions=[action], from_spellbook=True, guild=guild,
+    #                                                          game=game)
+    #
+    #     for response in formatted_responses:
+    #         await interaction.followup.send(f'{response}', ephemeral=True)
 
     @app_commands.command(name="actions-available-view",
                           description="Displays all current actions you can use")

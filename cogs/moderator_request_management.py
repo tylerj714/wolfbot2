@@ -47,7 +47,7 @@ class ModRequestManager(commands.Cog):
             await interaction.response.send_message(f'Submitted request **{request}** to the moderator!',
                                                     ephemeral=True)
             await mod_request_channel.send(
-                f'<@&{Conf.MOD_ROLE_ID}>\nPlayer **{requesting_player.player_discord_name}** has submitted an action request of **{request}**\n')
+                f'<@&{Conf.MOD_ROLE_ID}>\nPlayer **{requesting_player.player_discord_name}** has submitted an moderator request of **{request}**\n')
 
     @app_commands.command(name="action-submission",
                           description="Submit an action to be performed to the moderator")
@@ -126,10 +126,12 @@ class ModRequestManager(commands.Cog):
             # Inform the player of their new resource values:
             player_moderator_channel = await guild.fetch_channel(requesting_player.player_mod_channel)
             if player_moderator_channel:
-                formatted_resources = await construct_player_resources_display(player=requesting_player, guild=guild, game=game)
+                if player_action.action_costs:
+                    formatted_resources = await construct_player_resources_display(player=requesting_player, guild=guild, game=game)
 
-                for player_resource_display in formatted_resources:
-                    await player_moderator_channel.send(player_resource_display)
+                    for player_resource_display in formatted_resources:
+                        await player_moderator_channel.send(player_resource_display)
+                #TODO: Send confirmation in mod chat about action submission
 
             formatted_request = f'<@&{Conf.MOD_ROLE_ID}>\nPlayer **{requesting_player.player_discord_name}** has requested to use the action **{action}**\n'
             if target1:
